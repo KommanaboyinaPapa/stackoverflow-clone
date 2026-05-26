@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ───────────────────────────────────────────
+   Reset & Base
+   ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Brand palette (Stack Overflow–inspired) */
+  --brand-primary:   #f48225;
+  --brand-primary-h: #e06d10;
+  --brand-accent:    #0a95ff;
+  --brand-accent-h:  #0074cc;
+
+  /* Surface / background */
+  --bg-body:         #0d1117;
+  --bg-surface:      #161b22;
+  --bg-surface-alt:  #1c2333;
+  --bg-hover:        #21262d;
+
+  /* Text */
+  --text-primary:    #e6edf3;
+  --text-secondary:  #8b949e;
+  --text-muted:      #484f58;
+
+  /* Borders */
+  --border:          #30363d;
+  --border-focus:    var(--brand-accent);
+
+  /* Status */
+  --error:           #f85149;
+  --success:         #3fb950;
+
+  /* Misc */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,.35);
+  --transition:  .2s ease;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-body);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 1rem;
+}
+
+h1, h2, h3 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+p {
+  line-height: 1.65;
+}
+
+a { color: var(--brand-accent); text-decoration: none; transition: color var(--transition); }
+a:hover { color: var(--brand-accent-h); }

@@ -1,0 +1,53 @@
+/* ───────────────────────────────────────────
+   Back Button — premium, container-aligned
+   ─────────────────────────────────────────── */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.5rem 1.1rem;
+  margin: 0 0 1.25rem 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition);
+  font-family: inherit;
+}
+
+.back-button:hover {
+  background: var(--bg-hover);
+  border-color: rgba(10, 149, 255, 0.4);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transform: translateX(-2px);
+}
+
+.back-button:active {
+  transform: translateX(0) scale(0.98);
+}
+
+.back-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(10, 149, 255, 0.25);
+  border-color: var(--brand-accent);
+}
+
+@media (max-width: 768px) {
+  .back-button {
+    padding: 0.45rem 0.95rem;
+    margin-bottom: 1rem;
+    font-size: 0.8rem;
+  }
+}

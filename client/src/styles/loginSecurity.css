@@ -1,0 +1,241 @@
+/* Login device verification & history */
+
+/* Always-visible Profile panel */
+.profile-login-security-panel {
+  display: block;
+  visibility: visible;
+  width: 100%;
+  margin-bottom: 1.75rem;
+  padding: 1.25rem 1.15rem;
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.profile-section-heading {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+
+.profile-section-heading-spaced {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.profile-login-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.login-history-label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.login-history-empty-sub {
+  margin-top: 0;
+  font-size: 0.875rem;
+}
+
+.trusted-devices-list .trusted-device-item {
+  border-color: rgba(10, 149, 255, 0.25);
+}
+
+.login-security-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+
+.login-security-modal {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  padding: 1.75rem 1.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+.login-security-icon {
+  font-size: 2.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+
+.login-security-modal h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.login-security-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin-bottom: 0.75rem;
+}
+
+.login-security-device {
+  font-size: 0.85rem;
+  color: var(--brand-accent);
+  margin-bottom: 1rem;
+}
+
+.login-security-form {
+  text-align: left;
+  margin-top: 0.5rem;
+}
+
+.login-security-form input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  font-size: 1.25rem;
+  letter-spacing: 0.15em;
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.login-trust-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.login-trust-checkbox input {
+  margin-top: 0.2rem;
+  accent-color: var(--brand-accent);
+}
+
+.login-history-section h2 {
+  font-size: 1.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.login-history-hint {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+  line-height: 1.55;
+}
+
+.login-history-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.login-history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition);
+}
+
+.login-history-item.current {
+  border-color: rgba(63, 185, 80, 0.45);
+  box-shadow: 0 0 0 1px rgba(63, 185, 80, 0.2);
+}
+
+.login-history-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.login-history-device-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.2rem;
+}
+
+.login-history-meta {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.login-history-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.session-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  background: rgba(63, 185, 80, 0.15);
+  border: 1px solid rgba(63, 185, 80, 0.4);
+  color: var(--success);
+}
+
+.trusted-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: rgba(10, 149, 255, 0.12);
+  border: 1px solid rgba(10, 149, 255, 0.3);
+  color: var(--brand-accent);
+}
+
+.login-history-actions {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.login-history-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 600px) {
+  .login-history-item {
+    flex-direction: column;
+  }
+
+  .login-history-badges {
+    width: 100%;
+  }
+}
