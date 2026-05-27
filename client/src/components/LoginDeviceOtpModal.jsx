@@ -62,7 +62,7 @@ const LoginDeviceOtpModal = ({
             'We detected a sign-in from a new browser or device. Enter the one-time code to continue.'}
         </p>
         {pendingSession.demoForced && (
-          <div className="alert alert-info">Demo: Verify New Device</div>
+          <div className="alert alert-info">{t('auth.demoVerify', 'Demo: Verify New Device')}</div>
         )}
         {pendingSession.deviceLabel && (
           <p className="login-security-device">

@@ -7,14 +7,14 @@ import VoteButtons from '../components/VoteButtons';
 import { fetchQuestionById } from '../services/questionService';
 import getErrorMessage from '../utils/getErrorMessage';
 
-const timeAgo = (dateStr) => {
+const timeAgo = (dateStr, t) => {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins || 1} minutes ago`;
+  if (mins < 60) return t('detail.minutesAgo', '{{count}} minutes ago', { count: mins || 1 });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hours ago`;
+  if (hrs < 24) return t('detail.hoursAgo', '{{count}} hours ago', { count: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days} days ago`;
+  return t('detail.daysAgo', '{{count}} days ago', { count: days });
 };
 
 const QuestionDetail = () => {
@@ -104,7 +104,7 @@ const QuestionDetail = () => {
             <div className="post-meta">
               {t('detail.askedBy')} <strong>{question.user?.name || 'Anonymous'}</strong>
               <span className="meta-separator"> · </span>
-              {timeAgo(question.createdAt)}
+              {timeAgo(question.createdAt, t)}
             </div>
             <div className="post-body">{question.description}</div>
             {question.tags?.length > 0 && (
@@ -150,10 +150,10 @@ const QuestionDetail = () => {
                         />
                       )}
                       <span>
-                        {a.author?.name || 'Anonymous'} · {timeAgo(a.createdAt)}
+                        {a.author?.name || 'Anonymous'} · {timeAgo(a.createdAt, t)}
                       </span>
                       <span className="answer-vote-total">
-                        {a.voteScore ?? 0} votes
+                        {a.voteScore ?? 0} {t('questions.votes')}
                       </span>
                     </div>
                     <div className="post-body">{a.body}</div>

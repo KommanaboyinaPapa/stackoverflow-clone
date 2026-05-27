@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { createAnswer } from '../services/answerService';
 import getErrorMessage from '../utils/getErrorMessage';
 import LoginPrompt from './LoginPrompt';
@@ -11,17 +12,18 @@ import LoginPrompt from './LoginPrompt';
 const AnswerForm = ({ questionId, onAnswerPosted }) => {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const [answerBody, setAnswerBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   if (authLoading) {
-    return <div className="profile-loading">Checking login…</div>;
+    return <div className="profile-loading">{t('common.loading')}</div>;
   }
 
   if (!isAuthenticated) {
     return (
-      <LoginPrompt message="Please log in to post an answer to this question." />
+      <LoginPrompt message={t('auth.loginToPostAnswer', 'Please log in to post an answer to this question.')} />
     );
   }
 
@@ -30,7 +32,7 @@ const AnswerForm = ({ questionId, onAnswerPosted }) => {
     setError('');
 
     if (!answerBody.trim()) {
-      setError('Please write your answer before submitting.');
+      setError(t('answer.writeFirst', 'Please write your answer before submitting.'));
       return;
     }
 
@@ -43,12 +45,12 @@ const AnswerForm = ({ questionId, onAnswerPosted }) => {
       setAnswerBody('');
       onAnswerPosted?.(data.answer);
     } catch (err) {
-      const msg = getErrorMessage(err, 'Failed to post your answer.');
+      const msg = getErrorMessage(err, t('answer.failed', 'Failed to post your answer.'));
       setError(msg);
       if (err.response?.status === 401) {
         navigate('/login', {
           replace: true,
-          state: { message: 'Your session expired. Please log in again.' },
+          state: { message: t('auth.sessionExpired', 'Your session expired. Please log in again.') },
         });
       }
     } finally {
@@ -58,20 +60,20 @@ const AnswerForm = ({ questionId, onAnswerPosted }) => {
 
   return (
     <div className="your-answer">
-      <h3>Your Answer</h3>
-      <p className="form-hint">Share your solution or explanation below.</p>
+      <h3>{t('answer.yourAnswer', 'Your Answer')}</h3>
+      <p className="form-hint">{t('answer.hint', 'Share your solution or explanation below.')}</p>
       {error && <div className="alert alert-error">{error}</div>}
       <form onSubmit={handleSubmit}>
         <textarea
           className="answer-textarea"
           rows="8"
-          placeholder="Write your answer here…"
+          placeholder={t('answer.placeholder', 'Write your answer here…')}
           value={answerBody}
           onChange={(e) => setAnswerBody(e.target.value)}
           disabled={submitting}
         />
         <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? 'Posting…' : 'Post Your Answer'}
+          {submitting ? t('answer.posting', 'Posting…') : t('answer.postAnswer', 'Post Your Answer')}
         </button>
       </form>
     </div>

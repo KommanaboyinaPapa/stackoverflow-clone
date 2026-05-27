@@ -1,27 +1,41 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../components/BackButton';
-import { forgotPassword } from '../services/authService';
+import { useLanguage } from '../context/LanguageContext';
+import { confirmForgotPassword, forgotPassword } from '../services/authService';
 import getErrorMessage from '../utils/getErrorMessage';
 
 const ForgotPassword = () => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [method, setMethod] = useState('email');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [tempPassword, setTempPassword] = useState('');
+  const [sessionKey, setSessionKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
     setTempPassword('');
+    setSessionKey('');
     setCopied(false);
 
-    const payload = { email: email.trim(), phone: '' };
-    if (!payload.email) {
-      setError('Please enter your registered email address.');
+    const payload = {
+      email: method === 'email' ? email.trim() : '',
+      phone: method === 'phone' ? phone.trim() : '',
+    };
+    if (!payload.email && !payload.phone) {
+      setError(
+        method === 'email'
+          ? t('forgot.emailRequired')
+          : t('forgot.phoneRequired')
+      );
       return;
     }
 
@@ -29,29 +43,60 @@ const ForgotPassword = () => {
     try {
       const data = await forgotPassword(payload);
 
-      // Show password on screen if development mode and email not configured
-      if (data.showPasswordOnScreen && data.generatedPassword) {
+      if (data.generatedPassword) {
         setTempPassword(data.generatedPassword);
-        setSuccessMessage(
-          data.message ||
-            `Password reset successful.\nYour temporary password is: ${data.generatedPassword}`
-        );
-      } else if (data.generatedPassword) {
-        // Fallback: show password if it exists (shouldn't normally happen)
-        setTempPassword(data.generatedPassword);
-        setSuccessMessage(
-          data.message ||
-            `Password reset successful.\nYour temporary password is: ${data.generatedPassword}`
-        );
-      } else {
-        // Normal flow: email was sent successfully
-        setSuccessMessage(data.message);
+        setSessionKey(data.sessionKey || '');
       }
+
+      setSuccessMessage(data.message || t('forgot.tempGenerated'));
     } catch (err) {
       const msg = err.response?.data?.message;
-      setError(msg || getErrorMessage(err, 'Could not reset your password.'));
+      setError(msg || getErrorMessage(err, t('forgot.resetFailed')));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    if (!sessionKey || !tempPassword) return;
+    setError('');
+    setSuccessMessage('');
+    setConfirmLoading(true);
+    try {
+      const data = await confirmForgotPassword({
+        sessionKey,
+        confirm: true,
+        generatedPassword: tempPassword,
+      });
+      setSuccessMessage(data.message || t('forgot.confirmSuccess'));
+      // Prevent accidental re-sends; keep temp password visible for copy.
+      setSessionKey('');
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(msg || getErrorMessage(err, t('forgot.confirmFailed')));
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!sessionKey) {
+      setTempPassword('');
+      setSuccessMessage('');
+      return;
+    }
+    setError('');
+    setConfirmLoading(true);
+    try {
+      const data = await confirmForgotPassword({ sessionKey, confirm: false });
+      setSuccessMessage(data.message || 'Password reset cancelled.');
+      setTempPassword('');
+      setSessionKey('');
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(msg || getErrorMessage(err, t('forgot.cancelFailed')));
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -73,10 +118,8 @@ const ForgotPassword = () => {
         <div className="auth-card auth-card-glow">
         <div className="auth-header">
           <span className="auth-icon">🔑</span>
-          <h1>Forgot Password</h1>
-          <p className="auth-subtitle">
-            Reset your password using your registered email. You can use this option only once per day.
-          </p>
+          <h1>{t('forgot.title')}</h1>
+          <p className="auth-subtitle">{t('forgot.subtitle')}</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -95,41 +138,87 @@ const ForgotPassword = () => {
                 className="btn btn-outline btn-copy"
                 onClick={handleCopy}
               >
-                {copied ? 'Copied!' : 'Copy password'}
+                {copied ? t('forgot.copied') : t('forgot.copy')}
+              </button>
+            </div>
+            <div className="temp-password-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmSend}
+                disabled={confirmLoading || !sessionKey}
+              >
+                {confirmLoading ? t('forgot.submitting') : t('forgot.confirmSend')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleCancel}
+                disabled={confirmLoading || !sessionKey}
+              >
+                {t('common.cancel')}
               </button>
             </div>
             <p className="form-hint temp-password-hint">
-              Use this password on the{' '}
-              <Link to="/login">login page</Link>. Change it after signing in if you
-              want.
+              {t('forgot.tempPasswordHintStart')}{' '}
+              <Link to="/login">{t('auth.loginBtn')}</Link>{' '}
+              {t('forgot.tempPasswordHintEnd')}
             </p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <div className="forgot-method-tabs">
+            <button
+              type="button"
+              className={`forgot-tab ${method === 'email' ? 'active' : ''}`}
+              onClick={() => setMethod('email')}
+              disabled={!!tempPassword}
+            >
+              {t('forgot.emailTab')}
+            </button>
+            <button
+              type="button"
+              className={`forgot-tab ${method === 'phone' ? 'active' : ''}`}
+              onClick={() => setMethod('phone')}
+              disabled={!!tempPassword}
+            >
+              {t('forgot.phoneTab')}
+            </button>
+          </div>
           <div className="form-group">
-            <label htmlFor="forgot-email">Registered Email</label>
+            <label htmlFor="forgot-email">
+              {method === 'email'
+                ? t('forgot.emailLabel')
+                : t('forgot.phoneLabel')}
+            </label>
             <input
               id="forgot-email"
-              type="email"
-              name="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              type={method === 'email' ? 'email' : 'tel'}
+              name={method === 'email' ? 'email' : 'phone'}
+              placeholder={
+                method === 'email'
+                  ? t('forgot.emailPlaceholder')
+                  : t('forgot.phonePlaceholder')
+              }
+              value={method === 'email' ? email : phone}
+              onChange={(e) =>
+                method === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)
+              }
+              autoComplete={method === 'email' ? 'email' : 'tel'}
               disabled={!!tempPassword}
             />
           </div>
 
           {!tempPassword && (
             <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-              {loading ? 'Processing…' : 'Reset Password'}
+              {loading ? t('forgot.submitting') : t('forgot.submit')}
             </button>
           )}
         </form>
 
         <p className="auth-footer">
-          Remember your password? <Link to="/login">Back to Log In</Link>
+          {t('forgot.rememberPassword')} <Link to="/login">{t('forgot.backLogin')}</Link>
         </p>
         </div>
       </div>

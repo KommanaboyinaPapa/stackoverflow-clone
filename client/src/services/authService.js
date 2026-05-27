@@ -120,6 +120,19 @@ export const forgotPassword = async ({ email, phone }) => {
   return data;
 };
 
+export const confirmForgotPassword = async ({
+  sessionKey,
+  confirm,
+  generatedPassword,
+}) => {
+  const { data } = await API.post('/auth/forgot-password/confirm', {
+    sessionKey,
+    confirm,
+    generatedPassword,
+  });
+  return data;
+};
+
 export const logout = () => {
   clearAuth();
 };

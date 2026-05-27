@@ -57,11 +57,11 @@ const Social = () => {
 
     } catch (err) {
 
-      setError(getErrorMessage(err, 'Failed to load feed.'));
+      setError(getErrorMessage(err, t('social.loadFailed', 'Failed to load feed.')));
 
     }
 
-  }, []);
+  }, [t]);
 
 
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import API from '../services/api';
 import { upvoteAnswer, downvoteAnswer } from '../services/answerService';
 import getErrorMessage from '../utils/getErrorMessage';
@@ -14,6 +15,7 @@ const VoteButtons = ({
 }) => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const [score, setScore] = useState(initialScore);
   const [userVote, setUserVote] = useState(initialUserVote);
   const [loading, setLoading] = useState(false);
@@ -27,7 +29,7 @@ const VoteButtons = ({
 
   const redirectToLogin = (message) => {
     navigate('/login', {
-      state: { message: message || 'Please log in to vote.' },
+      state: { message: message || t('vote.loginRequired', 'Please log in to vote.') },
     });
   };
 
@@ -40,10 +42,10 @@ const VoteButtons = ({
   };
 
   const handleVoteError = (err) => {
-    const msg = getErrorMessage(err, 'Could not register your vote.');
+    const msg = getErrorMessage(err, t('vote.failed', 'Could not register your vote.'));
     setVoteError(msg);
     if (err.response?.status === 401) {
-      redirectToLogin('Please log in to vote.');
+      redirectToLogin(t('vote.loginRequired', 'Please log in to vote.'));
     }
   };
 
@@ -112,12 +114,12 @@ const VoteButtons = ({
           className={`vote-btn vote-up ${userVote === 'up' ? 'active' : ''}`}
           onClick={onUp}
           disabled={loading}
-          aria-label="Upvote"
-          title={isAuthenticated ? 'Upvote' : 'Log in to vote'}
+          aria-label={t('vote.upvote')}
+          title={isAuthenticated ? t('vote.upvote') : t('vote.loginRequired', 'Please log in to vote.')}
         >
           ▲
         </button>
-        <span className="vote-score" title="Total votes">
+        <span className="vote-score" title={t('vote.totalVotes')}>
           {score}
         </span>
         <button
@@ -125,8 +127,8 @@ const VoteButtons = ({
           className={`vote-btn vote-down ${userVote === 'down' ? 'active' : ''}`}
           onClick={onDown}
           disabled={loading}
-          aria-label="Downvote"
-          title={isAuthenticated ? 'Downvote' : 'Log in to vote'}
+          aria-label={t('vote.downvote')}
+          title={isAuthenticated ? t('vote.downvote') : t('vote.loginRequired', 'Please log in to vote.')}
         >
           ▼
         </button>

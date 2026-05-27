@@ -13,6 +13,20 @@ const parseDeviceInfo = (userAgent = '') => {
 
   let deviceType = 'Desktop';
   let deviceName = 'Desktop Computer';
+  let operatingSystem = 'Unknown';
+
+  // OS detection (independent of device type) so mobile entries don't end up "Unknown"
+  if (/Android/i.test(ua)) {
+    operatingSystem = 'Android';
+  } else if (/iPhone|iPad|iPod/i.test(ua)) {
+    operatingSystem = 'iOS';
+  } else if (/Windows/i.test(ua)) {
+    operatingSystem = 'Windows';
+  } else if (/Macintosh|Mac OS X/i.test(ua)) {
+    operatingSystem = 'macOS';
+  } else if (/Linux/i.test(ua)) {
+    operatingSystem = 'Linux';
+  }
 
   if (/Mobile|Android.*Mobile|iPhone|iPod/i.test(ua)) {
     deviceType = 'Mobile';
@@ -28,7 +42,15 @@ const parseDeviceInfo = (userAgent = '') => {
     deviceName = 'Linux PC';
   }
 
-  return { browser, deviceType, deviceName };
+  // Best-effort laptop detection (UA is often ambiguous; this is only a hint).
+  // UI will normalize Tablet -> Mobile for display.
+  if (deviceType === 'Desktop' && /CrOS|MacBook|Notebook|Laptop/i.test(ua)) {
+    deviceType = 'Laptop';
+    if (/CrOS/i.test(ua)) deviceName = 'Chromebook';
+    if (/MacBook/i.test(ua)) deviceName = 'MacBook';
+  }
+
+  return { browser, deviceType, deviceName, operatingSystem };
 };
 
 /** Microsoft Edge / legacy IE — skip extra device OTP per internship rules */
@@ -43,4 +65,3 @@ module.exports = {
   isMicrosoftBrowser,
   isChromeBrowser,
 };
-

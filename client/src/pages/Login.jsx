@@ -107,7 +107,7 @@ const Login = () => {
               id="login-email"
               type="email"
               name="email"
-              placeholder="you@example.com"
+              placeholder={t('auth.emailPlaceholder')}
               value={formData.email}
               onChange={handleChange}
               autoComplete="email"

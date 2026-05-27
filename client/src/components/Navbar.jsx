@@ -14,7 +14,7 @@ const Navbar = () => {
   const handleLogout = () => {
     logout();
     setMenuOpen(false);
-    navigate('/login', { state: { message: 'You have been logged out successfully.' } });
+    navigate('/login', { state: { message: t('nav.logoutSuccess') } });
   };
 
   const guestLinks = [
@@ -50,14 +50,14 @@ const Navbar = () => {
             className="navbar-avatar"
           />
           <span className="navbar-username" title={user.name}>
-            Hi, {user.name}
+            {t('nav.hiUser', { name: user.name })}
           </span>
         </Link>
       </li>
     ) : null;
 
   return (
-    <nav className="navbar" id="main-navbar" aria-label="Main navigation">
+    <nav className="navbar" id="main-navbar" aria-label={t('nav.mainNavigation')}>
       <div className="navbar-container">
         <Link to="/" className="navbar-brand" onClick={() => setMenuOpen(false)}>
           <span className="brand-icon" aria-hidden="true">
@@ -77,7 +77,7 @@ const Navbar = () => {
                 className="navbar-avatar"
               />
               <span className="navbar-username" title={user.name}>
-                Hi, {user.name}
+                {t('nav.hiUser', { name: user.name })}
               </span>
             </Link>
           </div>
@@ -87,7 +87,7 @@ const Navbar = () => {
           type="button"
           className={`navbar-toggle ${menuOpen ? 'active' : ''}`}
           onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle navigation menu"
+          aria-label={t('nav.toggleNavigation')}
           aria-expanded={menuOpen}
           id="navbar-toggle-btn"
         >

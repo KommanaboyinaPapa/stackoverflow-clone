@@ -45,6 +45,30 @@ const sendViaTwilio = async (phone, message) => {
   return { sent: true, provider: 'twilio' };
 };
 
+/**
+ * Send a custom SMS message (Twilio only).
+ * Note: MSG91 integration in this repo is OTP-template-based and doesn't support arbitrary bodies.
+ */
+const sendTextSms = async (phone, message) => {
+  if (isTwilioConfigured()) {
+    try {
+      return await sendViaTwilio(phone, message);
+    } catch (error) {
+      console.error('Twilio SMS failed:', error.message);
+      if (!isDevelopment()) {
+        return { sent: false, reason: error.message };
+      }
+    }
+  }
+
+  return {
+    sent: false,
+    reason: isMsg91Configured()
+      ? 'MSG91 is configured for OTP templates only (custom SMS not supported).'
+      : 'SMS delivery is not configured.',
+  };
+};
+
 const normalizeMsg91Mobile = (phone) => {
   const digits = String(phone || '').replace(/\D/g, '');
   if (digits.length === 10) return `91${digits}`;
@@ -193,6 +217,7 @@ module.exports = {
   isSmsConfigured,
   isTwilioConfigured,
   isMsg91Configured,
+  sendTextSms,
   sendOtpSms,
   verifyMsg91Otp,
 };

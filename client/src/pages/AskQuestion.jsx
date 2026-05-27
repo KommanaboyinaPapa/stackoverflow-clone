@@ -65,7 +65,7 @@ const AskQuestion = () => {
       }
       if (err.response?.status === 401) {
         navigate('/login', {
-          state: { from: '/ask', message: 'Please log in to ask a question.' },
+          state: { from: '/ask', message: t('ask.loginRequired', 'Please log in to ask a question.') },
         });
       }
     } finally {

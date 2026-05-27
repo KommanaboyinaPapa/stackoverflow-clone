@@ -9,7 +9,10 @@ const {
   getLoginHistory,
   trustDevice,
 } = require('../controllers/authController');
-const { forgotPassword } = require('../controllers/forgotPasswordController');
+const {
+  forgotPassword,
+  confirmForgotPassword,
+} = require('../controllers/forgotPasswordController');
 const auth = require('../middleware/auth');
 
 // POST /api/auth/register
@@ -23,6 +26,9 @@ router.post('/verify-device-login', verifyDeviceLogin);
 
 // POST /api/auth/forgot-password (public)
 router.post('/forgot-password', forgotPassword);
+
+// POST /api/auth/forgot-password/confirm (public)
+router.post('/forgot-password/confirm', confirmForgotPassword);
 
 // GET /api/auth/profile  (protected – requires valid JWT)
 router.get('/profile', auth, getProfile);

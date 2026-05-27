@@ -35,7 +35,10 @@ const DEMO_LOCATIONS = [
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) return String(forwarded).split(',')[0].trim();
-  return req.socket?.remoteAddress || req.ip || '127.0.0.1';
+  const raw = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+  // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:127.0.0.1)
+  const ip = String(raw).startsWith('::ffff:') ? String(raw).slice(7) : String(raw);
+  return ip || '';
 };
 
 const getDemoLocation = (ip) => {
@@ -64,6 +67,7 @@ const upsertTrustedDevice = async (userId, deviceId, payload) => {
     browser: payload.browser,
     deviceType: payload.deviceType,
     deviceName: payload.deviceName,
+    operatingSystem: payload.operatingSystem,
     ipAddress: payload.ipAddress,
     location: payload.location,
     lastLoginAt: new Date(),
@@ -83,6 +87,7 @@ const recordLoginHistory = async (userId, deviceId, sessionId, payload, isTruste
     browser: payload.browser,
     deviceType: payload.deviceType,
     deviceName: payload.deviceName,
+    operatingSystem: payload.operatingSystem,
     ipAddress: payload.ipAddress,
     location: payload.location,
     loginAt: new Date(),
@@ -132,7 +137,10 @@ const handlePostCredentialLogin = async (user, req) => {
   const payload = getDevicePayload(req);
   debugLog('LOGIN DEVICE PAYLOAD', payload);
 
-  if (payload.deviceType === 'Mobile' && !isMobileLoginWindowOpen()) {
+  const isMobileDevice =
+    payload.deviceType === 'Mobile' || payload.deviceType === 'Tablet';
+
+  if (isMobileDevice && !isMobileLoginWindowOpen()) {
     const err = new Error(MOBILE_LOGIN_MESSAGE);
     err.statusCode = 403;
     err.mobileLoginWindow = getMobileLoginWindowStatus();
@@ -153,6 +161,7 @@ const handlePostCredentialLogin = async (user, req) => {
         browser: payload.browser,
         deviceType: payload.deviceType,
         deviceName: payload.deviceName,
+        operatingSystem: payload.operatingSystem,
         ipAddress: payload.ipAddress,
         location: payload.location,
       }
@@ -206,6 +215,7 @@ const handlePostCredentialLogin = async (user, req) => {
     browser: payload.browser,
     deviceType: payload.deviceType,
     deviceName: payload.deviceName,
+    operatingSystem: payload.operatingSystem,
     ipAddress: payload.ipAddress,
     location: payload.location,
   });
@@ -292,6 +302,7 @@ const verifyDeviceLoginOtp = async ({ pendingSessionId, otp, trustDevice }, user
     browser: record.browser,
     deviceType: record.deviceType,
     deviceName: record.deviceName,
+    operatingSystem: record.operatingSystem,
     ipAddress: record.ipAddress,
     location: record.location,
   };
@@ -327,6 +338,7 @@ const getLoginHistoryForUser = async (userId, currentDeviceId, currentSessionId)
     _id: entry._id,
     deviceId: entry.deviceId,
     browser: entry.browser,
+    operatingSystem: entry.operatingSystem || 'Unknown',
     deviceType: entry.deviceType,
     deviceName: entry.deviceName,
     device: entry.deviceName,
@@ -354,6 +366,7 @@ const trustDeviceById = async (userId, deviceId) => {
     browser: latest.browser,
     deviceType: latest.deviceType,
     deviceName: latest.deviceName,
+    operatingSystem: latest.operatingSystem,
     ipAddress: latest.ipAddress,
     location: latest.location,
   });

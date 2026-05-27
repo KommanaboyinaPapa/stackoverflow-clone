@@ -4,14 +4,14 @@ import { useLanguage } from '../context/LanguageContext';
 import { fetchQuestions } from '../services/questionService';
 import getErrorMessage from '../utils/getErrorMessage';
 
-const timeAgo = (dateStr) => {
+const timeAgo = (dateStr, t) => {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins || 1}m ago`;
+  if (mins < 60) return t('questions.minutesAgo', '{{count}}m ago', { count: mins || 1 });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return t('questions.hoursAgo', '{{count}}h ago', { count: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return t('questions.daysAgo', '{{count}}d ago', { count: days });
 };
 
 const Questions = () => {
@@ -143,7 +143,7 @@ const Questions = () => {
                       <span className="meta-author">
                         {q.user?.name || 'Anonymous'}
                       </span>
-                      <span className="meta-time">{t('questions.asked')} {timeAgo(q.createdAt)}</span>
+                      <span className="meta-time">{t('questions.asked')} {timeAgo(q.createdAt, t)}</span>
                     </div>
                   </div>
                 </div>

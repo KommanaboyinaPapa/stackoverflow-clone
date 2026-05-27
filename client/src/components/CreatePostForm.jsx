@@ -30,13 +30,12 @@ const CreatePostForm = ({ canPost, limitInfo, onPosted }) => {
     return (
       <div className="create-post-block create-post-disabled">
         <p className="alert alert-error">
-          {limitInfo?.message ||
-            'Posting limit reached. Add more friends to post.'}
+          {limitInfo?.message || t('social.postingLimitReached')}
         </p>
         <p className="form-hint">
-          Friends: {limitInfo?.friendCount ?? 0} · Daily limit:{' '}
+          {t('social.friends')}: {limitInfo?.friendCount ?? 0} · {t('social.dailyLimit')}:{' '}
           {limitInfo?.dailyLimit === 'unlimited'
-            ? 'Unlimited'
+            ? t('social.unlimited')
             : limitInfo?.dailyLimit ?? 0}
         </p>
       </div>
@@ -48,7 +47,7 @@ const CreatePostForm = ({ canPost, limitInfo, onPosted }) => {
     setError('');
 
     if (!text.trim() && images.length === 0 && videos.length === 0) {
-      setError('Add text, an image, or a video.');
+      setError(t('social.addContent'));
       return;
     }
 
@@ -66,7 +65,7 @@ const CreatePostForm = ({ canPost, limitInfo, onPosted }) => {
       clearFileInputs();
       onPosted?.();
     } catch (err) {
-      const msg = err.response?.data?.message || getErrorMessage(err, 'Failed to create post.');
+      const msg = err.response?.data?.message || getErrorMessage(err, t('social.failedToCreate'));
       setError(msg);
     } finally {
       setLoading(false);
@@ -81,7 +80,7 @@ const CreatePostForm = ({ canPost, limitInfo, onPosted }) => {
       <div className="create-post-block-header">
         <h3>{t('social.create')}</h3>
         <p className="form-hint limit-hint">
-          Friends: <strong>{limitInfo?.friendCount ?? 0}</strong> · Posts today:{' '}
+          {t('social.friends')}: <strong>{limitInfo?.friendCount ?? 0}</strong> · {t('social.postsToday')}:{' '}
           <strong>{limitInfo?.postsToday ?? 0}</strong> /{' '}
           {limitInfo?.dailyLimit === 'unlimited' ? '∞' : limitInfo?.dailyLimit}
         </p>
@@ -92,7 +91,7 @@ const CreatePostForm = ({ canPost, limitInfo, onPosted }) => {
       <form onSubmit={handleSubmit} className="create-post-form">
         <textarea
           rows="3"
-          placeholder="What's on your mind?"
+          placeholder={t('social.whatsOnMind')}
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={loading}

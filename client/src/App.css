@@ -482,6 +482,14 @@
 .btn-copy { min-width: 140px; }
 .temp-password-hint { margin-bottom: 0; }
 
+.temp-password-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0.85rem 0 0.75rem;
+}
+
 .alert { padding: .65rem 1rem; border-radius: var(--radius-sm); font-size: .875rem; }
 .alert-error {
   background: rgba(248,81,73,.12);

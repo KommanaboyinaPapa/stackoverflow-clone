@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import {
   acceptFriendRequest,
   rejectFriendRequest,
@@ -9,6 +10,7 @@ import {
 import getErrorMessage from '../utils/getErrorMessage';
 
 const FriendRequestsPanel = ({ onFriendsChanged }) => {
+  const { t } = useLanguage();
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
   const [friendCount, setFriendCount] = useState(0);
@@ -38,7 +40,7 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
       setResults([]);
       return;
     }
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const data = await searchUsers(search.trim());
         setResults(data.users || []);
@@ -46,7 +48,7 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
         setResults([]);
       }
     }, 350);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search]);
 
   const handleSend = async (userId) => {
@@ -55,12 +57,12 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
     setLoading(true);
     try {
       await sendFriendRequest({ userId });
-      setSuccess('Friend request sent!');
+      setSuccess(t('social.friendRequestSent'));
       setSearch('');
       setResults([]);
       await load();
     } catch (err) {
-      setError(err.response?.data?.message || getErrorMessage(err, 'Request failed.'));
+      setError(err.response?.data?.message || getErrorMessage(err, t('social.requestFailed')));
     } finally {
       setLoading(false);
     }
@@ -72,7 +74,7 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
       await load();
       onFriendsChanged?.();
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not accept.'));
+      setError(getErrorMessage(err, t('social.couldNotAccept')));
     }
   };
 
@@ -81,26 +83,26 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
       await rejectFriendRequest(id);
       await load();
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not reject.'));
+      setError(getErrorMessage(err, t('social.couldNotReject')));
     }
   };
 
   return (
     <aside className="friends-panel">
-      <h3>Friends</h3>
+      <h3>{t('social.friends')}</h3>
       <p className="friends-count">
-        <strong>{friendCount}</strong> friends
+        <strong>{friendCount}</strong> {t('social.friendsLower')}
       </p>
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
       <div className="friend-add">
-        <label htmlFor="friend-search">Add friend (name or email)</label>
+        <label htmlFor="friend-search">{t('social.addFriendLabel')}</label>
         <input
           id="friend-search"
           type="text"
-          placeholder="Search users…"
+          placeholder={t('social.searchUsers')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -115,7 +117,7 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
                   onClick={() => handleSend(u._id)}
                   disabled={loading}
                 >
-                  Add
+                  {t('social.add')}
                 </button>
               </li>
             ))}
@@ -125,7 +127,7 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
 
       {incoming.length > 0 && (
         <div className="friend-section">
-          <h4>Incoming requests</h4>
+          <h4>{t('social.incomingRequests')}</h4>
           <ul className="friend-request-list">
             {incoming.map((r) => (
               <li key={r._id} className="friend-request-item">
@@ -136,14 +138,14 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
                     className="btn btn-primary btn-sm"
                     onClick={() => handleAccept(r._id)}
                   >
-                    Accept
+                    {t('social.accept')}
                   </button>
                   <button
                     type="button"
                     className="btn btn-outline btn-sm"
                     onClick={() => handleReject(r._id)}
                   >
-                    Reject
+                    {t('social.reject')}
                   </button>
                 </div>
               </li>
@@ -154,10 +156,10 @@ const FriendRequestsPanel = ({ onFriendsChanged }) => {
 
       {outgoing.length > 0 && (
         <div className="friend-section">
-          <h4>Sent requests</h4>
+          <h4>{t('social.sentRequests')}</h4>
           <ul className="friend-request-list pending">
             {outgoing.map((r) => (
-              <li key={r._id}>{r.toUser?.name} — pending</li>
+              <li key={r._id}>{r.toUser?.name} — {t('social.pending')}</li>
             ))}
           </ul>
         </div>

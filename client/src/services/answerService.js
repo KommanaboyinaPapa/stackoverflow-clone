@@ -18,3 +18,10 @@ export const upvoteAnswer = (answerId) =>
  */
 export const downvoteAnswer = (answerId) =>
   API.put(`/answers/downvote/${answerId}`).then((res) => res.data);
+
+/**
+ * DELETE /api/answers/:id
+ * Requires JWT (added automatically by api.js)
+ */
+export const deleteAnswer = (answerId) =>
+  API.delete(`/answers/${answerId}`).then((res) => res.data);

@@ -145,7 +145,7 @@ const LanguageOtpModal = () => {
             type="button"
             className="lang-modal-close"
             onClick={closeOtpModal}
-            aria-label="Close"
+            aria-label={t('common.close', 'Close')}
           >
             ×
           </button>
@@ -186,7 +186,7 @@ const LanguageOtpModal = () => {
             type="button"
             className="lang-modal-close"
             onClick={closeOtpModal}
-            aria-label="Close"
+            aria-label={t('common.close', 'Close')}
           >
             ×
           </button>
@@ -234,7 +234,7 @@ const LanguageOtpModal = () => {
           type="button"
           className="lang-modal-close"
           onClick={closeOtpModal}
-          aria-label="Close"
+          aria-label={t('common.close', 'Close')}
         >
           ×
         </button>
@@ -258,7 +258,9 @@ const LanguageOtpModal = () => {
         )}
 
         {meta?.destinationMasked && (
-          <p className="form-hint">Sent to: {meta.destinationMasked}</p>
+          <p className="form-hint">
+            {t('language.sentTo', 'Sent to:')} {meta.destinationMasked}
+          </p>
         )}
 
         {step === 'send' ? (
@@ -284,7 +286,7 @@ const LanguageOtpModal = () => {
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
-                placeholder="000000"
+                placeholder={t('language.otpExample', '000000')}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                 disabled={loading}

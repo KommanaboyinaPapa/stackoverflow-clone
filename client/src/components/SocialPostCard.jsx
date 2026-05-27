@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   likePost,
   commentPost,
@@ -9,17 +10,19 @@ import {
 } from '../services/socialService';
 import getErrorMessage from '../utils/getErrorMessage';
 
-const timeAgo = (dateStr) => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins || 1}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-};
-
 const SocialPostCard = ({ post, onUpdate }) => {
   const { user } = useAuth();
+  const { t } = useLanguage();
+
+  const formatTimeAgo = (dateStr) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t('social.justNow', 'Just now');
+    if (mins < 60) return t('social.timeAgoMinutes', '{{count}}m ago', { count: mins });
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return t('social.timeAgoHours', '{{count}}h ago', { count: hrs });
+    return t('social.timeAgoDays', '{{count}}d ago', { count: Math.floor(hrs / 24) });
+  };
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [likedByMe, setLikedByMe] = useState(post.likedByMe);
   const [shareCount, setShareCount] = useState(post.shareCount);
@@ -68,7 +71,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
       setLikeCount(data.likeCount);
       setLikedByMe(data.likedByMe);
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not like post.'));
+      setError(getErrorMessage(err, t('social.couldNotLike')));
     } finally {
       setLoading('');
     }
@@ -83,16 +86,16 @@ const SocialPostCard = ({ post, onUpdate }) => {
       setShareCount(data.shareCount);
       setSharedByMe(true);
       await copyShareLink();
-      setSuccess('Post link copied!');
+      setSuccess(t('social.linkCopied'));
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not share post.'));
+      setError(getErrorMessage(err, t('social.couldNotShare')));
     } finally {
       setLoading('');
     }
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this post? This cannot be undone.')) {
+    if (!window.confirm(t('social.deleteConfirm'))) {
       return;
     }
 
@@ -103,7 +106,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
       await deletePost(post._id);
       onUpdate?.();
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not delete post.'));
+      setError(getErrorMessage(err, t('social.couldNotDelete')));
     } finally {
       setLoading('');
     }
@@ -121,7 +124,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
       setShowComments(true);
       onUpdate?.();
     } catch (err) {
-      setError(getErrorMessage(err, 'Could not post comment.'));
+      setError(getErrorMessage(err, t('social.couldNotComment')));
     } finally {
       setLoading('');
     }
@@ -133,13 +136,13 @@ const SocialPostCard = ({ post, onUpdate }) => {
         {post.user?.profileImage?.trim() && (
           <img
             src={mediaFullUrl(post.user.profileImage)}
-            alt={`${post.user?.name || 'User'} avatar`}
+            alt={`${post.user?.name || t('common.user')} avatar`}
             className="social-post-avatar"
           />
         )}
         <div>
-          <strong className="social-post-author">{post.user?.name || 'User'}</strong>
-          <span className="social-post-time">{timeAgo(post.createdAt)}</span>
+          <strong className="social-post-author">{post.user?.name || t('common.user')}</strong>
+          <span className="social-post-time">{formatTimeAgo(post.createdAt)}</span>
         </div>
       </header>
 
@@ -148,7 +151,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
       {imageSources.length > 0 && (
         <div className="social-post-media social-images">
           {imageSources.map((src) => (
-            <img key={src} src={mediaFullUrl(src)} alt="Post" />
+            <img key={src} src={mediaFullUrl(src)} alt={t('social.postImageAlt', 'Social post image')} />
           ))}
         </div>
       )}
@@ -171,14 +174,14 @@ const SocialPostCard = ({ post, onUpdate }) => {
           onClick={handleLike}
           disabled={!!loading}
         >
-          ♥ {likeCount}
+          <span className="social-action-icon" aria-hidden="true">♥</span> {likeCount > 0 ? likeCount : ''}
         </button>
         <button
           type="button"
           className="social-action-btn"
           onClick={() => setShowComments(!showComments)}
         >
-          💬 {comments.length}
+          <span className="social-action-icon" aria-hidden="true">💬</span> {comments.length > 0 ? comments.length : ''}
         </button>
         <button
           type="button"
@@ -186,7 +189,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
           onClick={handleShare}
           disabled={!!loading}
         >
-          ↗ Share {shareCount > 0 ? `(${shareCount})` : ''}
+          <span className="social-action-icon" aria-hidden="true">↗</span> {t('social.share')} {shareCount > 0 ? `(${shareCount})` : ''}
         </button>
         {isOwner && (
           <button
@@ -195,7 +198,7 @@ const SocialPostCard = ({ post, onUpdate }) => {
             onClick={handleDelete}
             disabled={!!loading}
           >
-            🗑 Delete
+            <span className="social-action-icon" aria-hidden="true">🗑</span> {t('social.delete')}
           </button>
         )}
       </div>
@@ -205,22 +208,22 @@ const SocialPostCard = ({ post, onUpdate }) => {
           <ul className="social-comment-list">
             {comments.map((c, index) => (
               <li key={c._id || `comment-${index}-${c.createdAt}`} className="social-comment-item">
-                <strong>{c.user?.name || 'User'}</strong>
+                <strong>{c.user?.name || t('common.user')}</strong>
                 <span>{c.text}</span>
-                <small>{timeAgo(c.createdAt)}</small>
+                <small>{formatTimeAgo(c.createdAt)}</small>
               </li>
             ))}
           </ul>
           <form className="social-comment-form" onSubmit={handleComment}>
             <input
               type="text"
-              placeholder="Write a comment…"
+              placeholder={t('social.writeComment')}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               disabled={loading === 'comment'}
             />
             <button type="submit" className="btn btn-primary btn-sm" disabled={loading === 'comment'}>
-              Post
+              {t('social.post')}
             </button>
           </form>
         </div>

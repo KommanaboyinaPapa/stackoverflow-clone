@@ -19,8 +19,8 @@ const planTierClass = {
   gold: 'plan-gold featured',
 };
 
-const formatLimit = (limit) =>
-  limit === null || limit === undefined ? 'Unlimited questions / day' : `${limit} question${limit !== 1 ? 's' : ''} / day`;
+const formatLimit = (limit, t) =>
+  limit === null || limit === undefined ? t('subscription.unlimited') : t('subscription.perDay', { count: limit });
 
 const SubscriptionPlans = () => {
   const { t } = useLanguage();
@@ -54,11 +54,11 @@ const SubscriptionPlans = () => {
         setRazorpayEnabled(me.razorpayEnabled);
       }
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load subscription plans.'));
+      setError(getErrorMessage(err, t('subscription.loadFailed', 'Failed to load subscription plans.')));
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, t]);
 
   useEffect(() => {
     loadData();
@@ -67,24 +67,24 @@ const SubscriptionPlans = () => {
   const formatRazorpayError = (err, order) => {
     const data = err?.response?.data;
     if (data?.missing?.length) {
-      return `${data.message} (Missing: ${data.missing.join(', ')})`;
+      return `${data.message} (${t('subscription.missing', 'Missing')}: ${data.missing.join(', ')})`;
     }
     if (data?.message) return data.message;
     if (order && order.mode !== 'razorpay') {
-      return 'Razorpay order was not created. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server/.env and restart the server.';
+      return t('subscription.razorpayNotCreated', 'Razorpay order was not created. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server/.env and restart the server.');
     }
-    return getErrorMessage(err, 'Payment failed.');
+    return getErrorMessage(err, t('subscription.paymentFailed', 'Payment failed.'));
   };
 
   const handleSubscribe = async (planId) => {
     if (!isAuthenticated) {
-      navigate('/login', { state: { from: '/subscriptions', message: 'Log in to subscribe.' } });
+      navigate('/login', { state: { from: '/subscriptions', message: t('subscription.loginSubscribe') } });
       return;
     }
 
     if (!razorpayEnabled) {
       setError(
-        'Razorpay is not configured on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (rzp_test_…) to server/.env, then restart npm run dev.'
+        t('subscription.razorpayNotConfigured', 'Razorpay is not configured on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (rzp_test_…) to server/.env, then restart npm run dev.')
       );
       return;
     }
@@ -99,7 +99,7 @@ const SubscriptionPlans = () => {
 
       if (order.mode !== 'razorpay' || !order.razorpayOrderId || !order.keyId) {
         setError(
-          'Razorpay checkout unavailable: server did not return order_id or keyId. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server/.env.'
+          t('subscription.razorpayUnavailable', 'Razorpay checkout unavailable: server did not return order_id or keyId. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server/.env.')
         );
         setPayingPlan('');
         return;
@@ -108,7 +108,7 @@ const SubscriptionPlans = () => {
       const loaded = await loadRazorpayScript();
       if (!loaded || !window.Razorpay) {
         setError(
-          'Could not load Razorpay checkout script (https://checkout.razorpay.com/v1/checkout.js). Check your network or ad blocker.'
+          t('subscription.razorpayScriptFailed', 'Could not load Razorpay checkout script (https://checkout.razorpay.com/v1/checkout.js). Check your network or ad blocker.')
         );
         setPayingPlan('');
         return;
@@ -151,7 +151,7 @@ const SubscriptionPlans = () => {
         setError(
           resp?.error?.description ||
             resp?.error?.reason ||
-            'Razorpay payment failed. Please try again.'
+            t('subscription.razorpayPaymentFailed', 'Razorpay payment failed. Please try again.')
         );
         setPayingPlan('');
       });
@@ -179,17 +179,17 @@ const SubscriptionPlans = () => {
         {isAuthenticated && subscription && (
           <div className="subscription-status-bar">
             <span>
-              Current plan: <strong>{subscription.planName}</strong>
+              {t('subscription.currentPlan')}: <strong>{subscription.planName}</strong>
             </span>
             {quota && (
               <span>
-                Today: <strong>{quota.usedToday}</strong>
-                {quota.unlimited ? ' / ∞' : ` / ${quota.dailyLimit}`} questions
+                {t('subscription.today')}: <strong>{quota.usedToday}</strong>
+                {quota.unlimited ? ' / ∞' : ` / ${quota.dailyLimit}`} {t('subscription.questions')}
               </span>
             )}
             {subscription.subscriptionExpiresAt && subscription.planId !== 'free' && (
               <span>
-                Renews until:{' '}
+                {t('subscription.renewsUntil', 'Renews until')}:{' '}
                 <strong>
                   {new Date(subscription.subscriptionExpiresAt).toLocaleDateString()}
                 </strong>
@@ -204,12 +204,12 @@ const SubscriptionPlans = () => {
             role="status"
           >
             <strong>
-              {windowOpen ? 'Payment window open' : 'Payment window closed'}
+              {windowOpen ? t('subscription.windowOpen', 'Payment window open') : t('subscription.windowClosed', 'Payment window closed')}
             </strong>
             {' — '}
             {paymentWindow.message}
             {paymentWindow.istTimeLabel && (
-              <span> (Current IST: {paymentWindow.istTimeLabel})</span>
+              <span> ({t('subscription.currentIST', 'Current IST')}: {paymentWindow.istTimeLabel})</span>
             )}
           </div>
         )}
@@ -217,33 +217,33 @@ const SubscriptionPlans = () => {
         {error && <div className="alert alert-error">{error}</div>}
         {success && (
           <div className="subscription-success-panel">
-            <h3>Subscription activated</h3>
+            <h3>{t('subscription.activated')}</h3>
             <p>{success}</p>
             {lastInvoice && (
               <div className="subscription-receipt-card">
-                <h4>Invoice / Receipt</h4>
+                <h4>{t('subscription.invoiceReceipt')}</h4>
                 <dl className="receipt-details">
-                  <dt>Invoice #</dt>
+                  <dt>{t('subscription.invoiceNum')}</dt>
                   <dd>{lastInvoice.invoiceNumber}</dd>
-                  <dt>Plan</dt>
+                  <dt>{t('subscription.plan')}</dt>
                   <dd>{lastInvoice.planName}</dd>
-                  <dt>Amount</dt>
+                  <dt>{t('subscription.amount')}</dt>
                   <dd>₹{lastInvoice.amountInr}</dd>
-                  <dt>Paid</dt>
+                  <dt>{t('subscription.paid')}</dt>
                   <dd>{lastInvoice.paidAt}</dd>
-                  <dt>Valid until</dt>
+                  <dt>{t('subscription.validUntil')}</dt>
                   <dd>{lastInvoice.subscriptionExpiresAt}</dd>
-                  <dt>Questions / day</dt>
+                  <dt>{t('subscription.questionsPerDay')}</dt>
                   <dd>{lastInvoice.dailyQuestionLimitLabel}</dd>
                 </dl>
                 {lastInvoice.emailSent ? (
                   <p className="receipt-note success-note">
-                    Invoice emailed to {lastInvoice.customerEmail}.
+                    {t('subscription.invoiceEmailed', 'Invoice emailed to {{email}}.', { email: lastInvoice.customerEmail })}
                   </p>
                 ) : (
                   <p className="receipt-note">
                     {lastInvoice.receiptNote ||
-                      'Save these details — demo receipt (configure EMAIL_USER for invoice email).'}
+                      t('subscription.receiptNote', 'Save these details — demo receipt (configure EMAIL_USER for invoice email).')}
                   </p>
                 )}
                 <button
@@ -268,12 +268,12 @@ const SubscriptionPlans = () => {
                     URL.revokeObjectURL(url);
                   }}
                 >
-                  Download receipt (.txt)
+                  {t('subscription.downloadReceipt', 'Download receipt (.txt)')}
                 </button>
               </div>
             )}
             <Link to="/ask" className="btn btn-primary" style={{ marginTop: '1rem' }}>
-              Ask a Question
+              {t('nav.ask')}
             </Link>
           </div>
         )}
@@ -281,7 +281,7 @@ const SubscriptionPlans = () => {
         {loading ? (
           <div className="social-loading">
             <div className="loading-spinner" />
-            <p>Loading plans…</p>
+            <p>{t('subscription.loadingPlans')}</p>
           </div>
         ) : (
           <div className="subscription-pricing-grid">
@@ -295,17 +295,17 @@ const SubscriptionPlans = () => {
                   className={`pricing-card ${planTierClass[plan.id] || ''} ${isCurrent ? 'current' : ''}`}
                 >
                   {plan.id === 'gold' && !isCurrent && (
-                    <span className="pricing-badge">Popular</span>
+                    <span className="pricing-badge">{t('subscription.popular')}</span>
                   )}
                   {isCurrent && (
-                    <span className="pricing-badge current-badge">Current</span>
+                    <span className="pricing-badge current-badge">{t('subscription.current')}</span>
                   )}
                   <p className="pricing-tier">{plan.name}</p>
                   <h2>{plan.name}</h2>
                   <p className="pricing-desc">{plan.description}</p>
                   <div className="pricing-price">
                     {plan.priceInr === 0 ? (
-                      <span className="amount">Free</span>
+                      <span className="amount">{t('subscription.free')}</span>
                     ) : (
                       <>
                         <span className="amount">₹{plan.priceInr}</span>
@@ -313,7 +313,7 @@ const SubscriptionPlans = () => {
                       </>
                     )}
                   </div>
-                  <span className="pricing-limit">{formatLimit(plan.dailyQuestionLimit)}</span>
+                  <span className="pricing-limit">{formatLimit(plan.dailyQuestionLimit, t)}</span>
                   <ul className="pricing-features">
                     {plan.features?.map((f) => (
                       <li key={f}>{f}</li>
@@ -321,7 +321,7 @@ const SubscriptionPlans = () => {
                   </ul>
                   {isFree ? (
                     <button type="button" className="btn btn-outline" disabled={isCurrent}>
-                      {isCurrent ? 'Current plan' : 'Default plan'}
+                      {isCurrent ? t('subscription.current') : t('subscription.defaultPlan', 'Default plan')}
                     </button>
                   ) : !isAuthenticated ? (
                     <Link
@@ -329,7 +329,7 @@ const SubscriptionPlans = () => {
                       state={{ from: '/subscriptions' }}
                       className="btn btn-primary"
                     >
-                      Log in to subscribe
+                      {t('subscription.loginSubscribe')}
                     </Link>
                   ) : (
                     <button
@@ -344,14 +344,14 @@ const SubscriptionPlans = () => {
                       onClick={() => handleSubscribe(plan.id)}
                     >
                       {payingPlan === plan.id
-                        ? 'Processing…'
+                        ? t('subscription.processing', 'Processing…')
                         : isCurrent
-                          ? 'Current plan'
+                          ? t('subscription.current')
                           : !razorpayEnabled
-                            ? 'Razorpay not configured'
+                            ? t('subscription.noRazorpay', 'Razorpay not configured')
                           : windowOpen
-                            ? 'Subscribe now'
-                            : 'Unavailable now'}
+                            ? t('subscription.subscribeNow', 'Subscribe now')
+                            : t('subscription.unavailable', 'Unavailable now')}
                     </button>
                   )}
                 </article>
@@ -362,15 +362,15 @@ const SubscriptionPlans = () => {
 
         <p className="subscription-payment-note">
           {razorpayEnabled
-            ? 'Razorpay TEST MODE checkout enabled. Use test card 4111 4111 4111 1111, any future expiry/CVV.'
-            : 'Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (rzp_test_…) to server/.env and restart the server.'}
+            ? t('subscription.razorpayTestNote', 'Razorpay TEST MODE checkout enabled. Use test card 4111 4111 4111 1111, any future expiry/CVV.')
+            : t('subscription.razorpaySetupNote', 'Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (rzp_test_…) to server/.env and restart the server.')}
           {' '}
-          Payments only 10:00–11:00 AM IST. Invoices emailed when EMAIL_USER/EMAIL_PASS is configured; otherwise download receipt after pay.
+          {t('subscription.paymentWindowNote', 'Payments only 10:00–11:00 AM IST. Invoices emailed when EMAIL_USER/EMAIL_PASS is configured; otherwise download receipt after pay.')}
         </p>
 
         {!isAuthenticated && (
           <p className="auth-footer" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            Already have an account? <Link to="/login">Log in</Link>
+            {t('subscription.alreadyAccount')} <Link to="/login">{t('nav.login')}</Link>
           </p>
         )}
       </div>

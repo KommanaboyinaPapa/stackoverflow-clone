@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 /**
  * Wraps pages that require login (Ask Question, Profile).
@@ -8,13 +9,14 @@ import { useAuth } from '../context/AuthContext';
  */
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
   const location = useLocation();
 
   if (loading) {
     return (
       <div className="page auth-page">
         <div className="auth-card">
-          <div className="profile-loading">Checking authentication…</div>
+          <div className="profile-loading">{t('common.loading')}</div>
         </div>
       </div>
     );
@@ -27,7 +29,7 @@ const ProtectedRoute = ({ children }) => {
         replace
         state={{
           from: location.pathname,
-          message: 'Please log in to access this page.',
+          message: t('auth.loginRequired', 'Please log in to access this page.'),
         }}
       />
     );
