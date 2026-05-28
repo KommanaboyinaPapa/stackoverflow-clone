@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+const isProd = process.env.NODE_ENV === 'production';
+const envApiUrl = process.env.REACT_APP_API_URL;
+
+// Production deployments must set REACT_APP_API_URL.
+// We avoid silently falling back to localhost in production.
+if (isProd && !envApiUrl) {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[Config] REACT_APP_API_URL is required in production. Example: https://your-backend.com/api'
+  );
+}
+
+// In production we do NOT fall back to localhost or relative /api.
+// Deployments must provide REACT_APP_API_URL.
+const baseURL = isProd ? envApiUrl : envApiUrl || 'http://localhost:5000/api';
+
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
