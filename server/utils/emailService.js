@@ -1,112 +1,189 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const isDev = () => process.env.NODE_ENV !== 'production';
 
-const getSmtpUser = () => process.env.SMTP_USER || process.env.EMAIL_USER || '';
-const getSmtpPass = () => process.env.SMTP_PASS || process.env.EMAIL_PASS || '';
 const getEmailTimeoutMs = () => Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 8000;
-const getSmtpHost = () => {
-  if (process.env.SMTP_HOST) return process.env.SMTP_HOST;
-  const user = getSmtpUser();
-  if (user.includes('gmail.com')) return 'smtp.gmail.com';
-  return '';
+
+// Prefer Resend in production; fallback to SendGrid. Do not use Gmail SMTP in production.
+const getEmailProvider = () => {
+  const resendKey = process.env.RESEND_API_KEY || '';
+  if (resendKey.trim()) {
+    return { name: 'resend', apiKey: resendKey.trim() };
+  }
+  const sendgridKey = process.env.SENDGRID_API_KEY || '';
+  if (sendgridKey.trim()) {
+    return { name: 'sendgrid', apiKey: sendgridKey.trim() };
+  }
+  return { name: 'none', apiKey: '' };
 };
 
-const getSmtpPort = () => Number(process.env.SMTP_PORT) || 587;
-const getSmtpSecure = () => {
-  if (typeof process.env.SMTP_SECURE !== 'undefined') {
-    return process.env.SMTP_SECURE === 'true';
+const getFromAddress = () => process.env.EMAIL_FROM || '';
+
+const parseFrom = (from) => {
+  // Supports: "Name <email@domain.com>" or "email@domain.com"
+  const str = String(from || '').trim();
+  const match = str.match(/^(.*)<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^"|"$/g, '');
+    const email = match[2].trim();
+    return { name: name || undefined, email };
   }
-  // Default behavior: only port 465 uses implicit TLS.
-  return getSmtpPort() === 465;
+  return { email: str };
 };
 
 const isEmailConfigured = () => {
-  const user = getSmtpUser();
-  const pass = getSmtpPass();
-  const host = getSmtpHost();
-  return Boolean(host && user && pass);
+  const provider = getEmailProvider();
+  const from = getFromAddress();
+  return Boolean(provider.name !== 'none' && provider.apiKey && from && from.trim());
 };
 
-const createTransporter = () => {
-  const host = getSmtpHost();
-  const port = getSmtpPort();
-  const secure = getSmtpSecure();
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user: getSmtpUser(),
-      pass: getSmtpPass(),
-    },
-
-    // IPv4-safe config: Railway environments sometimes lack IPv6 egress,
-    // causing connect ENETUNREACH when DNS returns AAAA first.
-    family: 4,
-    lookup: (hostname, options, cb) =>
-      dns.lookup(hostname, { ...options, family: 4 }, cb),
-
-    // Hard timeouts so SMTP/network issues don't stall API responses forever.
-    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 5000,
-    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 5000,
-    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 8000,
-
-    // Make sure TLS validation uses the correct servername.
-    tls: {
-      servername: host,
-      minVersion: 'TLSv1.2',
-    },
-  });
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
 };
 
-const getFromAddress = () =>
-  process.env.EMAIL_FROM || getSmtpUser() || 'noreply@stackclone.local';
+const extractApiError = async (res) => {
+  try {
+    const text = await res.text();
+    return text || `${res.status} ${res.statusText}`;
+  } catch {
+    return `${res.status} ${res.statusText}`;
+  }
+};
 
-const isDev = () => process.env.NODE_ENV !== 'production';
+const sendViaResend = async ({ from, to, subject, html, text }) => {
+  const provider = getEmailProvider();
+  const payload = {
+    from,
+    to: [to],
+    subject,
+    html,
+    text,
+  };
+  const res = await fetchWithTimeout(
+    'https://api.resend.com/emails',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${provider.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    getEmailTimeoutMs()
+  );
+  if (!res.ok) {
+    const errText = await extractApiError(res);
+    throw new Error(`Resend API error: ${errText}`);
+  }
+  return res.json().catch(() => ({}));
+};
 
-const withTimeout = (promise, ms, label = 'operation') =>
-  new Promise((resolve, reject) => {
-    const id = setTimeout(() => {
-      const err = new Error(`${label} timed out after ${ms}ms`);
-      err.code = 'TIMEOUT';
-      reject(err);
-    }, ms);
-    promise
-      .then((val) => {
-        clearTimeout(id);
-        resolve(val);
-      })
-      .catch((err) => {
-        clearTimeout(id);
-        reject(err);
-      });
-  });
+const sendViaSendgrid = async ({ from, to, subject, html, text }) => {
+  const provider = getEmailProvider();
+  const fromObj = parseFrom(from);
+  const payload = {
+    personalizations: [{ to: [{ email: to }] }],
+    from: fromObj.name ? { email: fromObj.email, name: fromObj.name } : { email: fromObj.email },
+    subject,
+    content: [
+      { type: 'text/plain', value: text || '' },
+      { type: 'text/html', value: html || '' },
+    ],
+  };
+
+  const res = await fetchWithTimeout(
+    'https://api.sendgrid.com/v3/mail/send',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${provider.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    getEmailTimeoutMs()
+  );
+  if (!res.ok) {
+    const errText = await extractApiError(res);
+    throw new Error(`SendGrid API error: ${errText}`);
+  }
+  return { accepted: true };
+};
+
+const sendEmail = async ({ to, subject, html, text }) => {
+  const provider = getEmailProvider();
+  const from = getFromAddress();
+
+  if (!from?.trim()) {
+    throw new Error('EMAIL_FROM is required for email sending.');
+  }
+
+  if (provider.name === 'resend') {
+    return sendViaResend({ from, to, subject, html, text });
+  }
+  if (provider.name === 'sendgrid') {
+    return sendViaSendgrid({ from, to, subject, html, text });
+  }
+  throw new Error('Email provider is not configured (set RESEND_API_KEY or SENDGRID_API_KEY).');
+};
 
 /**
- * Verify SMTP connectivity/auth without crashing the server.
- * Nodemailer verify() checks DNS, TCP, STARTTLS, and auth.  (Runs in background.)
+ * Startup provider verification (non-blocking). Server calls verifySmtpTransport()
+ * on boot; we keep that function name for compatibility.
  */
 const verifySmtpTransport = async () => {
-  if (!isEmailConfigured()) {
-    console.log('SMTP VERIFY SKIPPED (NOT CONFIGURED)');
-    return { ok: false, skipped: true };
-  }
-  const host = getSmtpHost();
-  const port = getSmtpPort();
-  const secure = getSmtpSecure();
+  const provider = getEmailProvider();
+  console.log('EMAIL PROVIDER START', { provider: provider.name });
 
-  console.log('SMTP VERIFY START', { host, port, secure });
+  if (!isEmailConfigured()) {
+    console.error('EMAIL PROVIDER FAILED', {
+      provider: provider.name,
+      error:
+        'Email provider not configured (missing RESEND_API_KEY/SENDGRID_API_KEY and/or EMAIL_FROM).',
+    });
+    return { ok: false, error: 'not_configured' };
+  }
+
   try {
-    const transporter = createTransporter();
-    await withTimeout(transporter.verify(), 8000, 'smtp.verify');
-    console.log('SMTP VERIFY SUCCESS', { host, port, secure });
+    if (provider.name === 'resend') {
+      // Lightweight auth/connectivity check.
+      const res = await fetchWithTimeout(
+        'https://api.resend.com/api-keys',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${provider.apiKey}` },
+        },
+        8000
+      );
+      if (!res.ok) {
+        const errText = await extractApiError(res);
+        throw new Error(`Resend verify failed: ${errText}`);
+      }
+    } else if (provider.name === 'sendgrid') {
+      const res = await fetchWithTimeout(
+        'https://api.sendgrid.com/v3/user/profile',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${provider.apiKey}` },
+        },
+        8000
+      );
+      if (!res.ok) {
+        const errText = await extractApiError(res);
+        throw new Error(`SendGrid verify failed: ${errText}`);
+      }
+    }
+
+    console.log('EMAIL PROVIDER SUCCESS', { provider: provider.name });
     return { ok: true };
   } catch (error) {
-    console.error('SMTP VERIFY FAILED', {
-      host,
-      port,
-      secure,
+    console.error('EMAIL PROVIDER FAILED', {
+      provider: provider.name,
       error: error?.message || String(error),
     });
     return { ok: false, error: error?.message || String(error) };
@@ -126,12 +203,6 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
   const subject = subjectMap[purpose] || subjectMap.verification;
 
   if (!isEmailConfigured()) {
-    console.log('EMAIL SEND SKIPPED (NOT CONFIGURED)', {
-      host: getSmtpHost(),
-      userConfigured: Boolean(getSmtpUser()),
-      passConfigured: Boolean(getSmtpPass()),
-      nodeEnv: process.env.NODE_ENV || '(unset)',
-    });
     if (isDev()) {
       console.log('--- EMAIL OTP (dev, not configured) ---');
       console.log(`To: ${toEmail}`);
@@ -144,32 +215,23 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
   }
 
   try {
-    console.log('OTP EMAIL CONFIG', {
-      host: getSmtpHost(),
-      userConfigured: Boolean(getSmtpUser()),
-      passConfigured: Boolean(getSmtpPass()),
-    });
+    const provider = getEmailProvider();
+    console.log('OTP EMAIL CONFIG', { provider: provider.name });
     // Keep both log formats for easier production grep / backwards compatibility.
     console.log('EMAIL SEND START', { toEmail, purpose, userName });
     console.log('OTP EMAIL SEND START', { toEmail, purpose, userName });
-    const transporter = createTransporter();
-    await withTimeout(
-      transporter.sendMail({
-        from: `"StackClone" <${getFromAddress()}>`,
-        to: toEmail,
-        subject,
-        text: `Hello ${userName},\n\nYour one-time code is: ${otpCode}\n\nValid for 5 minutes. Do not share this code.\n\n— StackClone`,
-        html: `
-          <p>Hello <strong>${userName}</strong>,</p>
-          <p>Your one-time verification code:</p>
-          <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otpCode}</p>
-          <p>Valid for <strong>5 minutes</strong>. Do not share this code.</p>
-          <p>— StackClone Team</p>
-        `,
-      }),
-      getEmailTimeoutMs(),
-      'sendMail'
-    );
+    await sendEmail({
+      to: toEmail,
+      subject,
+      text: `Hello ${userName},\n\nYour one-time code is: ${otpCode}\n\nValid for 5 minutes. Do not share this code.\n\n— StackClone`,
+      html: `
+        <p>Hello <strong>${userName}</strong>,</p>
+        <p>Your one-time verification code:</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otpCode}</p>
+        <p>Valid for <strong>5 minutes</strong>. Do not share this code.</p>
+        <p>— StackClone Team</p>
+      `,
+    });
     console.log('EMAIL SEND SUCCESS', { toEmail, purpose });
     console.log('OTP EMAIL SEND SUCCESS', { toEmail, purpose });
     return { sent: true };
@@ -207,25 +269,23 @@ const sendInvoiceEmail = async (toEmail, userName, invoice) => {
   }
 
   try {
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from: `"StackClone Billing" <${getFromAddress()}>`,
+    await sendEmail({
       to: toEmail,
       subject: `StackClone Invoice ${invoice.invoiceNumber}`,
       text: `Hello ${userName},\n\nThank you for your subscription.\n\n${lines}\n\n— StackClone`,
       html: `
-        <h2>Payment receipt</h2>
-        <p>Hello <strong>${userName}</strong>,</p>
-        <table style="border-collapse:collapse;">
-          <tr><td><strong>Invoice</strong></td><td>${invoice.invoiceNumber}</td></tr>
-          <tr><td><strong>Plan</strong></td><td>${invoice.planName}</td></tr>
-          <tr><td><strong>Amount</strong></td><td>₹${invoice.amountInr}</td></tr>
-          <tr><td><strong>Paid</strong></td><td>${invoice.paidAt}</td></tr>
-          <tr><td><strong>Expires</strong></td><td>${invoice.subscriptionExpiresAt}</td></tr>
-          <tr><td><strong>Questions/day</strong></td><td>${invoice.dailyQuestionLimitLabel}</td></tr>
-        </table>
-        <p>— StackClone Team</p>
-      `,
+          <h2>Payment receipt</h2>
+          <p>Hello <strong>${userName}</strong>,</p>
+          <table style="border-collapse:collapse;">
+            <tr><td><strong>Invoice</strong></td><td>${invoice.invoiceNumber}</td></tr>
+            <tr><td><strong>Plan</strong></td><td>${invoice.planName}</td></tr>
+            <tr><td><strong>Amount</strong></td><td>₹${invoice.amountInr}</td></tr>
+            <tr><td><strong>Paid</strong></td><td>${invoice.paidAt}</td></tr>
+            <tr><td><strong>Expires</strong></td><td>${invoice.subscriptionExpiresAt}</td></tr>
+            <tr><td><strong>Questions/day</strong></td><td>${invoice.dailyQuestionLimitLabel}</td></tr>
+          </table>
+          <p>— StackClone Team</p>
+        `,
     });
     return { sent: true };
   } catch (error) {
@@ -247,19 +307,17 @@ const sendPasswordEmail = async (toEmail, newPassword, userName) => {
   }
 
   try {
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from: `"StackClone" <${getFromAddress()}>`,
+    await sendEmail({
       to: toEmail,
       subject: 'Your new StackClone password',
       text: `Hello ${userName},\n\nYour password has been reset.\n\nNew password: ${newPassword}\n\nPlease log in and change it if you wish.\n\n— StackClone Team`,
       html: `
-        <p>Hello <strong>${userName}</strong>,</p>
-        <p>Your password has been reset.</p>
-        <p><strong>New password:</strong> <code>${newPassword}</code></p>
-        <p>Please log in and change it if you wish.</p>
-        <p>— StackClone Team</p>
-      `,
+          <p>Hello <strong>${userName}</strong>,</p>
+          <p>Your password has been reset.</p>
+          <p><strong>New password:</strong> <code>${newPassword}</code></p>
+          <p>Please log in and change it if you wish.</p>
+          <p>— StackClone Team</p>
+        `,
     });
     return { sent: true };
   } catch (error) {
