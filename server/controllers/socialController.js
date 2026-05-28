@@ -12,7 +12,15 @@ const mediaUrl = (filename) => `/uploads/social/${filename}`;
 
 const formatPost = (post, userId) => {
   const uid = userId?.toString();
-  return {
+  
+  // DEBUG: Log what we're getting from the database
+  console.log('DEBUG formatPost called with post._id:', post._id);
+  console.log('DEBUG formatPost - post.images raw:', post.images);
+  console.log('DEBUG formatPost - post.images type:', Array.isArray(post.images) ? 'array' : typeof post.images);
+  console.log('DEBUG formatPost - post.images length:', post.images?.length);
+  console.log('DEBUG formatPost - post.videos raw:', post.videos);
+  
+  const result = {
     _id: post._id,
     text: post.text,
     images: post.images || [],
@@ -31,6 +39,9 @@ const formatPost = (post, userId) => {
     createdAt: post.createdAt,
     user: post.user,
   };
+  
+  console.log('DEBUG formatPost - result.images:', result.images);
+  return result;
 };
 
 const getFriendCount = async (userId) => {
@@ -89,6 +100,20 @@ exports.createPost = async (req, res) => {
     const text = req.body.text?.trim() || '';
     const images = (req.files?.images || []).map((f) => mediaUrl(f.filename));
     const videos = (req.files?.videos || []).map((f) => mediaUrl(f.filename));
+    
+    // DEBUG: Log the image/video paths and file details
+    console.log('DEBUG createPost - req.files keys:', Object.keys(req.files || {}));
+    console.log('DEBUG createPost - images count:', images.length);
+    console.log('DEBUG createPost - images array:', images);
+    console.log('DEBUG createPost - videos count:', videos.length);
+    if (req.files?.images?.length > 0) {
+      console.log('DEBUG createPost - Images uploaded:', req.files.images.map(f => ({
+        originalname: f.originalname,
+        filename: f.filename,
+        path: f.path,
+        mediaUrl: mediaUrl(f.filename)
+      })));
+    }
 
     if (!text && images.length === 0 && videos.length === 0) {
       return res.status(400).json({ message: 'Add text, an image, or a video to post.' });
@@ -102,10 +127,12 @@ exports.createPost = async (req, res) => {
     });
 
     await post.populate('user', 'name profileImage');
+    const formatted = formatPost(post, req.user._id);
+    console.log('DEBUG createPost - formatPost result images:', formatted.images);
     return res.status(201).json({
       success: true,
       message: 'Post created',
-      post: formatPost(post, req.user._id),
+      post: formatted,
     });
   } catch (error) {
     console.error('createPost error:', error.message);
@@ -122,9 +149,22 @@ exports.getFeed = async (req, res) => {
       .populate('user', 'name profileImage')
       .populate('comments.user', 'name profileImage');
 
+    console.log('DEBUG getFeed - Posts retrieved:', posts.length);
+    if (posts.length > 0) {
+      console.log('DEBUG getFeed - First post images from DB:', posts[0].images);
+      console.log('DEBUG getFeed - First post images type:', typeof posts[0].images);
+      console.log('DEBUG getFeed - First post full object keys:', Object.keys(posts[0].toObject()));
+    }
+
+    const formattedPosts = posts.map((p) => {
+      const formatted = formatPost(p, req.user._id);
+      console.log('DEBUG getFeed - Formatted post images:', formatted.images);
+      return formatted;
+    });
+
     return res.json({
       success: true,
-      posts: posts.map((p) => formatPost(p, req.user._id)),
+      posts: formattedPosts,
     });
   } catch (error) {
     console.error('getFeed error:', error.message);

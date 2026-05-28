@@ -7,8 +7,10 @@ const {
 } = require('../utils/otpService');
 const {
   isTwilioConfigured,
+  isTwilioVerifyConfigured,
   isMsg91Configured,
   verifyMsg91Otp,
+  verifyTwilioVerifyOtp,
 } = require('../utils/smsService');
 
 const VALID_LANGS = ['en', 'es', 'hi', 'pt', 'zh', 'fr'];
@@ -42,7 +44,7 @@ exports.sendLanguageOtp = async (req, res) => {
 
     const smsProvider =
       channel === 'mobile'
-        ? isTwilioConfigured()
+        ? isTwilioVerifyConfigured() || isTwilioConfigured()
           ? 'twilio'
           : isMsg91Configured()
             ? 'msg91'
@@ -55,10 +57,17 @@ exports.sendLanguageOtp = async (req, res) => {
       });
     }
 
+    // OTP generation rules:
+    // - Email (includes FR) always uses local OTP code (sent via email service)
+    // - Mobile via Twilio Verify: Twilio generates the OTP (no local code)
+    // - Mobile via Twilio Messaging (fallback): use local OTP code and send as SMS body
+    // - Mobile via MSG91: provider generates OTP (no local code)
     const code =
-      channel === 'email' || (channel === 'mobile' && smsProvider === 'twilio')
+      channel === 'email'
         ? generateOtpCode()
-        : undefined;
+        : channel === 'mobile' && smsProvider === 'twilio' && !isTwilioVerifyConfigured()
+          ? generateOtpCode()
+          : undefined;
     const expiresAt = getOtpExpiresAt();
 
     await LanguageOtp.deleteMany({
@@ -75,9 +84,14 @@ exports.sendLanguageOtp = async (req, res) => {
       expiresAt,
     });
 
+    if (channel === 'mobile') {
+      console.log('Language OTP user phone (DB):', user.phone || '');
+    }
+
     const delivery = await deliverOtp({
       channel,
       email: user.email,
+      // Always use the logged-in user's saved profile phone number from DB.
       phone: user.phone,
       code,
       purpose: 'language_change',
@@ -85,8 +99,18 @@ exports.sendLanguageOtp = async (req, res) => {
     });
 
     if (channel === 'mobile' && !delivery.sent) {
+      console.error('Language OTP SMS send failed:', {
+        provider: delivery.provider || null,
+        reason: delivery.reason || null,
+      });
       await LanguageOtp.deleteOne({ _id: otpRecord._id });
-      return res.status(502).json({ message: 'Could not send OTP. Please try again.' });
+      // Keep UI flow/message same, but include backend reason for debugging.
+      return res.status(502).json({
+        message: 'Could not send OTP. Please try again.',
+        provider: delivery.provider || null,
+        reason: delivery.reason || null,
+        code: 'OTP_SEND_FAILED',
+      });
     }
 
     const response = {
@@ -159,6 +183,19 @@ exports.verifyLanguageOtp = async (req, res) => {
       }
       const verification = await verifyMsg91Otp(user.phone, String(otp).trim());
       if (!verification.verified) {
+        return res.status(400).json({ message: 'Invalid OTP. Please try again.' });
+      }
+    } else if (
+      record.channel === 'mobile' &&
+      record.provider === 'twilio' &&
+      isTwilioVerifyConfigured()
+    ) {
+      if (!user.phone?.trim()) {
+        return res.status(400).json({ message: 'Mobile number missing in profile.' });
+      }
+      const verification = await verifyTwilioVerifyOtp(user.phone, String(otp).trim());
+      if (!verification.verified) {
+        console.error('Twilio Verify check failed:', verification.reason || 'invalid otp');
         return res.status(400).json({ message: 'Invalid OTP. Please try again.' });
       }
     } else {

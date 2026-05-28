@@ -2,11 +2,52 @@
 .language-selector {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  position: relative;
 }
 
 .language-selector-compact {
   gap: 0.35rem;
+}
+
+/* Navbar-specific refinements */
+.navbar-language {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-language .language-selector-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.navbar-language .language-select {
+  min-width: 160px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.92rem;
+  border-radius: 8px;
+}
+
+.navbar-language-desktop {
+  margin-left: 0.75rem;
+}
+
+.navbar-language-mobile .language-select {
+  min-width: 120px;
+}
+
+/* Make select and label align nicely in navbar */
+.language-selector {
+  align-items: center;
 }
 
 .language-selector-label {
@@ -17,32 +58,125 @@
 }
 
 .language-select {
-  padding: 0.45rem 0.65rem;
-  background: var(--bg-body);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: border-color 180ms ease, box-shadow 220ms ease, transform 140ms ease, background 180ms ease;
+  min-width: 220px;
   max-width: 100%;
+  text-align: left;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 2.6rem; /* room for custom arrow */
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 -6px 18px rgba(0,0,0,0.04);
 }
 
 .language-select:hover {
-  border-color: rgba(10, 149, 255, 0.45);
+  border-color: rgba(10, 149, 255, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(10,149,255,0.04);
 }
 
 .language-select:focus {
   outline: none;
   border-color: var(--brand-accent);
-  box-shadow: 0 0 0 3px rgba(10, 149, 255, 0.2);
+  box-shadow: 0 6px 30px rgba(10, 149, 255, 0.12), 0 0 0 4px rgba(10, 149, 255, 0.12);
 }
 
 .language-guest-hint {
   color: var(--text-muted);
   font-size: 0.75rem;
+}
+
+/* Premium/dark refinements when applied */
+.language-premium .language-select {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 28px rgba(6, 11, 22, 0.45);
+}
+
+.language-premium .language-selector-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.language-premium .language-guest-hint {
+  color: rgba(255,255,255,0.5);
+}
+
+/* Improve option readability (browser-limited) */
+.language-select option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* Smooth, clean hover highlight for select and options */
+.language-select {
+  transition: background-color 180ms ease, box-shadow 180ms ease, transform 140ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.language-selector:hover .language-select,
+.language-select:hover {
+  background: linear-gradient(180deg, rgba(10,149,255,0.03), rgba(10,149,255,0.015));
+  border-color: rgba(10,149,255,0.5);
+  box-shadow: 0 12px 34px rgba(10,149,255,0.06);
+  transform: translateY(-2px);
+}
+
+.language-select option:hover {
+  background-color: rgba(10,149,255,0.08);
+  color: #ffffff;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.language-selector::after {
+  transition: color 160ms ease, transform 140ms ease;
+}
+
+.language-selector:hover::after {
+  color: var(--brand-accent);
+  transform: translateY(-1px);
+}
+
+/* Custom dropdown arrow via pseudo-element on wrapper (works cross-browser) */
+.language-selector::after {
+  content: '\25BE'; /* small down triangle */
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* Improve focus ring and hover for better affordance */
+.language-select:focus {
+  outline: none;
+  border-color: var(--brand-accent);
+  box-shadow: 0 8px 28px rgba(10,149,255,0.12), 0 0 0 4px rgba(10,149,255,0.06);
+}
+
+/* On small screens fall back to native simpler styling */
+@media (max-width: 420px) {
+  .language-selector::after { right: 8px; }
+  .language-select { min-width: 140px; padding-right: 2rem; font-size: 0.9rem; }
 }
 
 .navbar-language {
@@ -81,25 +215,31 @@
 .lang-modal {
   position: relative;
   width: 100%;
-  max-width: 440px;
-  padding: 1.75rem 1.5rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  max-width: 520px;
+  padding: 2rem;
+  background: linear-gradient(180deg, var(--bg-surface), rgba(0,0,0,0.02));
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 14px;
+  box-shadow: 0 20px 52px rgba(6, 11, 22, 0.48);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .lang-modal h2 {
-  font-size: 1.25rem;
-  margin-bottom: 0.5rem;
-  padding-right: 2rem;
+  font-size: 1.35rem;
+  margin: 0;
+  padding: 0;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
 }
 
 .lang-modal-subtitle {
   color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.55;
-  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .lang-modal-channel {
@@ -113,35 +253,36 @@
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  width: 2rem;
-  height: 2rem;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 10px;
   color: var(--text-secondary);
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   line-height: 1;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), transform 100ms ease;
 }
 
 .lang-modal-close:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .lang-demo-otp {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  margin-bottom: 1rem;
-  background: rgba(244, 130, 37, 0.1);
-  border: 1px dashed var(--brand-primary);
-  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  margin: 0.6rem 0 0.6rem 0;
+  background: rgba(244, 130, 37, 0.06);
+  border: 1px dashed rgba(244,130,37,0.18);
+  border-radius: 10px;
 }
 
 .lang-demo-otp code {
@@ -162,22 +303,27 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   margin-top: 1rem;
+  align-items: center;
 }
 
 .lang-modal-actions .btn {
-  flex: 1;
-  min-width: 120px;
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
 }
 
 .lang-otp-form input {
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
   text-align: center;
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   letter-spacing: 0.2em;
   background: var(--bg-body);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 10px;
   color: var(--text-primary);
   font-family: inherit;
 }
@@ -219,14 +365,32 @@
   border: none;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0.5rem;
+  padding: 0.5rem 0.65rem;
 }
 
 .btn-ghost:hover {
   color: var(--text-primary);
+}
+
+/* Primary and outline button styles for modal */
+.lang-modal .btn-primary {
+  background: linear-gradient(180deg, var(--brand-accent), rgba(8, 120, 220, 0.9));
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 20px rgba(10, 149, 255, 0.18);
+}
+
+.lang-modal .btn-outline {
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.08);
+  color: var(--text-primary);
+}
+
+.lang-modal .alert {
+  margin: 0.4rem 0 0.2rem 0;
 }
 
 .lang-phone-form input {
@@ -303,4 +467,36 @@
   .lang-modal-actions .btn {
     width: 100%;
   }
+}
+
+/* Dark dropdown for navbar language selector */
+.navbar-language .language-select,
+.language-premium .navbar-language .language-select {
+  background: linear-gradient(180deg, #0b1016, #07090c);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 8px 20px rgba(2,6,12,0.6);
+}
+
+.navbar-language .language-select option,
+.language-premium .navbar-language .language-select option {
+  background-color: #0b1016;
+  color: #ffffff;
+}
+
+/* Improve dropdown arrow contrast in dark mode */
+.navbar-language .language-selector::after {
+  color: rgba(255,255,255,0.75);
+}
+
+/* Ensure focus ring is visible on dark background */
+.navbar-language .language-select:focus {
+  box-shadow: 0 8px 28px rgba(10,149,255,0.16), 0 0 0 4px rgba(10,149,255,0.08);
+  border-color: rgba(10,149,255,0.9);
+}
+
+/* Ensure dropdown text is readable (white) */
+.language-selector .language-select,
+.language-selector .language-select option {
+  color: #ffffff !important;
 }

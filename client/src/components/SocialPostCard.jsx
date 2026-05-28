@@ -33,6 +33,8 @@ const SocialPostCard = ({ post, onUpdate }) => {
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [brokenImages, setBrokenImages] = useState(new Set());
+  const [brokenVideos, setBrokenVideos] = useState(new Set());
 
   const isOwner =
     user?.id?.toString() === post.user?._id?.toString() ||
@@ -150,17 +152,66 @@ const SocialPostCard = ({ post, onUpdate }) => {
 
       {imageSources.length > 0 && (
         <div className="social-post-media social-images">
-          {imageSources.map((src) => (
-            <img key={src} src={mediaFullUrl(src)} alt={t('social.postImageAlt', 'Social post image')} />
-          ))}
+          {imageSources.map((src, index) => {
+            const imageUrl = mediaFullUrl(src);
+            const isBroken = brokenImages.has(src);
+            
+            if (isBroken) {
+              return (
+                <div key={src || `img-${index}`} className="media-unavailable">
+                  <span className="media-unavailable-icon">🖼️</span>
+                  <span className="media-unavailable-text">{t('social.imageUnavailable', 'Image unavailable')}</span>
+                </div>
+              );
+            }
+            
+            return (
+              <img 
+                key={src || `img-${index}`} 
+                src={imageUrl} 
+                alt={t('social.postImageAlt', 'Social post image')}
+                onError={(e) => {
+                  console.error('Image load error:', src, 'Full URL:', imageUrl);
+                  setBrokenImages(prev => new Set([...prev, src]));
+                }}
+              />
+            );
+          })}
         </div>
       )}
 
       {videoSources.length > 0 && (
         <div className="social-post-media social-videos">
-          {videoSources.map((src) => (
-            <video key={src} src={mediaFullUrl(src)} controls />
-          ))}
+          {videoSources.map((src, index) => {
+            const videoUrl = mediaFullUrl(src);
+            const isBroken = brokenVideos.has(src);
+            
+            if (isBroken) {
+              return (
+                <div key={src || `vid-${index}`} className="media-unavailable">
+                  <span className="media-unavailable-icon">🎥</span>
+                  <span className="media-unavailable-text">{t('social.videoUnavailable', 'Video unavailable')}</span>
+                </div>
+              );
+            }
+            
+            return (
+              <video 
+                key={src || `vid-${index}`} 
+                src={videoUrl} 
+                controls 
+                preload="metadata"
+                playsInline
+                onError={(e) => {
+                  console.error('Video load error:', src, 'Full URL:', videoUrl, 'Error:', e.target.error);
+                  setBrokenVideos(prev => new Set([...prev, src]));
+                }}
+              >
+                <source src={videoUrl} type="video/mp4" />
+                {t('social.videoNotSupported', 'Your browser does not support the video tag.')}
+              </video>
+            );
+          })}
         </div>
       )}
 

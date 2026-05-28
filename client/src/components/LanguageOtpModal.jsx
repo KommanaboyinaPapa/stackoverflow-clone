@@ -88,7 +88,10 @@ const LanguageOtpModal = () => {
 
   if (!otpModal) return null;
 
-  const handleSendOtp = () => sendOtpFlow();
+  const handleSendOtp = () => {
+    console.log('FRONTEND SEND OTP CLICKED');
+    sendOtpFlow();
+  };
 
   const handleVerify = async (e) => {
     e.preventDefault();

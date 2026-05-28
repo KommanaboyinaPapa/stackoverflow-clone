@@ -15,7 +15,7 @@ const LanguageSelector = ({ className = '', compact = false }) => {
   };
 
   return (
-    <div className={`language-selector ${compact ? 'language-selector-compact' : ''} ${className}`}>
+    <div className={`language-selector language-premium ${compact ? 'language-selector-compact' : ''} ${className}`}>
       <label htmlFor="app-language-select" className="language-selector-label">
         {compact ? '🌐' : t('nav.language')}
       </label>
@@ -29,7 +29,7 @@ const LanguageSelector = ({ className = '', compact = false }) => {
       >
         {LANGUAGE_OPTIONS.map((opt) => (
           <option key={opt.code} value={opt.code}>
-            {compact ? opt.code.toUpperCase() : `${opt.native} (${opt.label})`}
+            {opt.label}
           </option>
         ))}
       </select>

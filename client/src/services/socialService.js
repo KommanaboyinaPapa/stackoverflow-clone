@@ -1,12 +1,37 @@
 import API from './api';
 
-const SERVER_BASE =
-  (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+const getServerBase = () => {
+  const apiBase = String(API.defaults.baseURL || '');
+  // Convert ".../api" -> "..." so we can construct /uploads URLs.
+  return apiBase.replace(/\/api\/?$/, '');
+};
 
 export const mediaFullUrl = (path) => {
   if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return `${SERVER_BASE}${path}`;
+  
+  // Already a full URL (old posts might have stored full URLs)
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  
+  // Handle different path formats for backward compatibility
+  let cleanPath = path;
+  
+  // If path doesn't start with /, add it
+  if (!cleanPath.startsWith('/')) {
+    // Check if it's just a filename (old format)
+    if (!cleanPath.includes('/')) {
+      cleanPath = `/uploads/social/${cleanPath}`;
+    } else if (cleanPath.startsWith('uploads/')) {
+      // Old format: uploads/social/file.jpg -> /uploads/social/file.jpg
+      cleanPath = `/${cleanPath}`;
+    } else {
+      // Any other relative path, add leading slash
+      cleanPath = `/${cleanPath}`;
+    }
+  }
+  
+  return `${getServerBase()}${cleanPath}`;
 };
 
 export const getPostingLimit = () =>
