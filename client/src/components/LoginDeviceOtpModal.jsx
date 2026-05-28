@@ -61,7 +61,7 @@ const LoginDeviceOtpModal = ({
           {t('loginSecurity.desc') ||
             'We detected a sign-in from a new browser or device. Enter the one-time code to continue.'}
         </p>
-        {pendingSession.demoForced && (
+        {process.env.NODE_ENV !== 'production' && pendingSession.demoForced && (
           <div className="alert alert-info">{t('auth.demoVerify', 'Demo: Verify New Device')}</div>
         )}
         {pendingSession.deviceLabel && (
@@ -72,7 +72,7 @@ const LoginDeviceOtpModal = ({
 
         {error && <div className="alert alert-error">{error}</div>}
 
-        {pendingSession.demoOtp && (
+        {process.env.NODE_ENV !== 'production' && pendingSession.demoOtp && (
           <div className="lang-demo-otp">
             <span className="lang-demo-label">
               {t('language.demoOtp') || 'Demo OTP'}:

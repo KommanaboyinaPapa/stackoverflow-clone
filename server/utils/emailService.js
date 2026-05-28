@@ -57,6 +57,12 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
   }
 
   try {
+    console.log('OTP EMAIL CONFIG', {
+      host: getSmtpHost(),
+      userConfigured: Boolean(getSmtpUser()),
+      passConfigured: Boolean(getSmtpPass()),
+    });
+    console.log('OTP EMAIL SEND START', { toEmail, purpose, userName });
     const transporter = createTransporter();
     await transporter.sendMail({
       from: `"StackClone" <${getFromAddress()}>`,
@@ -71,9 +77,10 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
         <p>— StackClone Team</p>
       `,
     });
+    console.log('OTP EMAIL SEND SUCCESS', { toEmail, purpose });
     return { sent: true };
   } catch (error) {
-    console.error('OTP email failed:', error.message);
+    console.error('OTP EMAIL SEND FAILED', { toEmail, purpose, error: error.message });
     if (isDev()) {
       console.log(`Dev fallback OTP for ${toEmail}: ${otpCode}`);
       return { sent: false, reason: error.message, demo: true };

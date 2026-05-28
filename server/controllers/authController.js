@@ -143,6 +143,11 @@ exports.login = async (req, res) => {
       requiresDeviceVerification: result.requiresDeviceVerification || false,
       sessionId: result.sessionId ? 'present' : 'none',
     });
+    console.log('LOGIN RESPONSE SENT', {
+      email: user.email,
+      requiresDeviceVerification: result.requiresDeviceVerification || false,
+      deviceId: req.body?.deviceId || null,
+    });
     return res.json(result);
   } catch (error) {
     console.error('Login error:', error.stack || error.message);

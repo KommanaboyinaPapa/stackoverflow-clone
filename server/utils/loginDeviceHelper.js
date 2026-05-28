@@ -196,6 +196,15 @@ const handlePostCredentialLogin = async (user, req) => {
     return completeLoginSession(user, req, deviceId, true);
   }
 
+  if (payload.browser === 'Google Chrome') {
+    console.log('CHROME OTP FLOW HIT', {
+      email: user.email,
+      deviceId,
+      browser: payload.browser,
+      userAgent: req.body?.userAgent || req.headers['user-agent'] || '',
+    });
+  }
+
   debugLog('NEW DEVICE DETECTED, GENERATING OTP', {
     userId: user._id.toString(),
     email: user.email,
@@ -233,6 +242,24 @@ const handlePostCredentialLogin = async (user, req) => {
     reason: delivery.reason || null,
   });
 
+  if (!delivery.sent) {
+    const err = new Error(
+      process.env.NODE_ENV === 'production'
+        ? `Failed to send OTP email. ${delivery.reason || 'Please try again later.'}`
+        : `OTP delivery failed. ${delivery.reason || 'Using demo OTP in development.'}`
+    );
+    err.statusCode = process.env.NODE_ENV === 'production' ? 502 : 500;
+    err.delivery = delivery;
+    debugLog('OTP DELIVERY FAILED', {
+      email: user.email,
+      deviceId,
+      delivery,
+    });
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
+  }
+
   const response = {
     success: true,
     requiresDeviceVerification: true,
@@ -246,11 +273,11 @@ const handlePostCredentialLogin = async (user, req) => {
     otpSent: delivery.sent,
   };
 
-  if (forceDeviceVerification) {
+  if (forceDeviceVerification && process.env.NODE_ENV !== 'production') {
     response.demoForced = true;
   }
 
-  if (delivery.showDemoOtp) {
+  if (delivery.showDemoOtp && process.env.NODE_ENV !== 'production') {
     response.demoOtp = delivery.showDemoOtp;
     response.demoNote = delivery.demoNote;
   }
