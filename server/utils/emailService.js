@@ -85,7 +85,9 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
       userConfigured: Boolean(getSmtpUser()),
       passConfigured: Boolean(getSmtpPass()),
     });
+    // Keep both log formats for easier production grep / backwards compatibility.
     console.log('EMAIL SEND START', { toEmail, purpose, userName });
+    console.log('OTP EMAIL SEND START', { toEmail, purpose, userName });
     const transporter = createTransporter();
     await withTimeout(
       transporter.sendMail({
@@ -105,9 +107,11 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
       'sendMail'
     );
     console.log('EMAIL SEND SUCCESS', { toEmail, purpose });
+    console.log('OTP EMAIL SEND SUCCESS', { toEmail, purpose });
     return { sent: true };
   } catch (error) {
     console.error('EMAIL SEND FAILED', { toEmail, purpose, error: error.message });
+    console.error('OTP EMAIL SEND FAILED', { toEmail, purpose, error: error.message });
     if (isDev()) {
       console.log(`Dev fallback OTP for ${toEmail}: ${otpCode}`);
       return { sent: false, reason: error.message, demo: true };
