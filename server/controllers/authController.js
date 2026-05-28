@@ -6,6 +6,11 @@ const { generateToken } = require('../utils/jwt');
 const { formatUser } = require('../utils/formatUser');
 const { validateRegister, validateLogin } = require('../utils/validators');
 const {
+  isMobileLoginWindowOpen,
+  getMobileLoginWindowStatus,
+  MOBILE_LOGIN_MESSAGE,
+} = require('../utils/mobileLoginWindow');
+const {
   completeLoginSession,
   handlePostCredentialLogin,
   verifyDeviceLoginOtp,
@@ -98,6 +103,24 @@ exports.login = async (req, res) => {
     if (validationErrors.length) {
       debugLog('LOGIN VALIDATION FAILED', validationErrors[0]);
       return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+    }
+
+    // Backend-only mobile detection: rely on request User-Agent header (do not trust frontend hints).
+    const userAgent = String(req.headers['user-agent'] || '');
+    const isMobileRequest = /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);
+    console.log('LOGIN DEVICE TYPE DETECTED:', isMobileRequest ? 'MOBILE' : 'DESKTOP');
+
+    if (isMobileRequest) {
+      const windowStatus = getMobileLoginWindowStatus();
+      console.log('MOBILE TIME WINDOW CHECK:', {
+        allowed: windowStatus.open,
+        istTime: windowStatus.istTimeLabel,
+        window: windowStatus.windowLabel,
+      });
+
+      if (!isMobileLoginWindowOpen()) {
+        return res.status(403).json({ message: MOBILE_LOGIN_MESSAGE });
+      }
     }
 
     const user = await User.findOne({ email: requestPayload.email }).select('+password');
