@@ -5,6 +5,29 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import getErrorMessage from '../utils/getErrorMessage';
 
+const MOBILE_LOGIN_MESSAGE =
+  'Mobile login is allowed only between 10:00 AM and 1:00 PM IST.';
+
+const isMobileUserAgent = (ua = '') => /Mobi|Android|iPhone|iPad|iPod/i.test(String(ua));
+
+const getISTMinutesSinceMidnight = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  return hour * 60 + minute;
+};
+
+const isWithinMobileWindowIST = (date = new Date()) => {
+  const mins = getISTMinutesSinceMidnight(date);
+  // 10:00 (600) through 13:00 (780) inclusive
+  return mins >= 10 * 60 && mins <= 13 * 60;
+};
+
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -16,8 +39,33 @@ const Login = () => {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [pendingSession, setPendingSession] = useState(null);
+  const [mobileBlocked, setMobileBlocked] = useState(false);
 
   const redirectTo = location.state?.from || '/';
+
+  useEffect(() => {
+    // Frontend UX check only (backend restriction remains the source of truth).
+    const ua = navigator?.userAgent || '';
+    const isMobile = isMobileUserAgent(ua);
+    if (!isMobile) {
+      setMobileBlocked(false);
+      return;
+    }
+
+    const update = () => {
+      const allowed = isWithinMobileWindowIST();
+      setMobileBlocked(!allowed);
+      if (!allowed) {
+        setInfo(MOBILE_LOGIN_MESSAGE);
+        setError('');
+        setSuccess('');
+      }
+    };
+
+    update();
+    const id = window.setInterval(update, 30 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (location.state?.message) {
@@ -41,6 +89,11 @@ const Login = () => {
     setError('');
     setSuccess('');
     setInfo('');
+
+    if (mobileBlocked) {
+      setInfo(MOBILE_LOGIN_MESSAGE);
+      return;
+    }
 
     if (!formData.email.trim() || !formData.password) {
       setError(`${t('auth.email')} & ${t('auth.password')} required.`);
@@ -112,6 +165,7 @@ const Login = () => {
               onChange={handleChange}
               autoComplete="email"
               required
+              disabled={loading || mobileBlocked}
             />
           </div>
 
@@ -131,10 +185,15 @@ const Login = () => {
               onChange={handleChange}
               autoComplete="current-password"
               required
+              disabled={loading || mobileBlocked}
             />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={loading || mobileBlocked}
+          >
             {loading ? t('auth.loggingIn') : t('auth.loginBtn')}
           </button>
         </form>
