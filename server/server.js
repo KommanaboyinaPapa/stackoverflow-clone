@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const fs = require('fs');
 
 // Load environment variables from server/.env (works regardless of process cwd)
 const envPath = path.join(__dirname, '.env');
@@ -26,7 +27,66 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Serve static uploads with proper MIME types and range support for videos
+const uploadsPath = path.join(__dirname, 'uploads');
+console.log('Serving static files from:', uploadsPath);
+
+app.use('/uploads', (req, res, next) => {
+  const filePath = path.join(uploadsPath, req.path);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    console.error('File not found:', filePath);
+    return res.status(404).json({ message: 'Media file not found' });
+  }
+  
+  const ext = path.extname(filePath).toLowerCase();
+  
+  // Set proper MIME types
+  if (ext === '.mp4') {
+    res.setHeader('Content-Type', 'video/mp4');
+  } else if (ext === '.webm') {
+    res.setHeader('Content-Type', 'video/webm');
+  } else if (ext === '.mov') {
+    res.setHeader('Content-Type', 'video/quicktime');
+  } else if (ext === '.avi') {
+    res.setHeader('Content-Type', 'video/x-msvideo');
+  } else if (ext === '.jpg' || ext === '.jpeg') {
+    res.setHeader('Content-Type', 'image/jpeg');
+  } else if (ext === '.png') {
+    res.setHeader('Content-Type', 'image/png');
+  } else if (ext === '.gif') {
+    res.setHeader('Content-Type', 'image/gif');
+  } else if (ext === '.webp') {
+    res.setHeader('Content-Type', 'image/webp');
+  }
+  
+  // Enable range requests for video streaming
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+  
+  if (range && (ext === '.mp4' || ext === '.webm' || ext === '.mov' || ext === '.avi')) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(filePath, { start, end });
+    
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+    });
+    
+    file.pipe(res);
+  } else {
+    res.setHeader('Content-Length', fileSize);
+    res.setHeader('Accept-Ranges', 'bytes');
+    fs.createReadStream(filePath).pipe(res);
+  }
+});
 
 // Basic health check route
 app.get('/', (req, res) => {
