@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
 const getSmtpUser = () => process.env.SMTP_USER || process.env.EMAIL_USER || '';
 const getSmtpPass = () => process.env.SMTP_PASS || process.env.EMAIL_PASS || '';
@@ -10,6 +11,15 @@ const getSmtpHost = () => {
   return '';
 };
 
+const getSmtpPort = () => Number(process.env.SMTP_PORT) || 587;
+const getSmtpSecure = () => {
+  if (typeof process.env.SMTP_SECURE !== 'undefined') {
+    return process.env.SMTP_SECURE === 'true';
+  }
+  // Default behavior: only port 465 uses implicit TLS.
+  return getSmtpPort() === 465;
+};
+
 const isEmailConfigured = () => {
   const user = getSmtpUser();
   const pass = getSmtpPass();
@@ -17,20 +27,38 @@ const isEmailConfigured = () => {
   return Boolean(host && user && pass);
 };
 
-const createTransporter = () =>
-  nodemailer.createTransport({
-    host: getSmtpHost(),
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
+const createTransporter = () => {
+  const host = getSmtpHost();
+  const port = getSmtpPort();
+  const secure = getSmtpSecure();
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
     auth: {
       user: getSmtpUser(),
       pass: getSmtpPass(),
     },
+
+    // IPv4-safe config: Railway environments sometimes lack IPv6 egress,
+    // causing connect ENETUNREACH when DNS returns AAAA first.
+    family: 4,
+    lookup: (hostname, options, cb) =>
+      dns.lookup(hostname, { ...options, family: 4 }, cb),
+
     // Hard timeouts so SMTP/network issues don't stall API responses forever.
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 5000,
     greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 5000,
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 8000,
+
+    // Make sure TLS validation uses the correct servername.
+    tls: {
+      servername: host,
+      minVersion: 'TLSv1.2',
+    },
   });
+};
 
 const getFromAddress = () =>
   process.env.EMAIL_FROM || getSmtpUser() || 'noreply@stackclone.local';
@@ -54,6 +82,36 @@ const withTimeout = (promise, ms, label = 'operation') =>
         reject(err);
       });
   });
+
+/**
+ * Verify SMTP connectivity/auth without crashing the server.
+ * Nodemailer verify() checks DNS, TCP, STARTTLS, and auth.  (Runs in background.)
+ */
+const verifySmtpTransport = async () => {
+  if (!isEmailConfigured()) {
+    console.log('SMTP VERIFY SKIPPED (NOT CONFIGURED)');
+    return { ok: false, skipped: true };
+  }
+  const host = getSmtpHost();
+  const port = getSmtpPort();
+  const secure = getSmtpSecure();
+
+  console.log('SMTP VERIFY START', { host, port, secure });
+  try {
+    const transporter = createTransporter();
+    await withTimeout(transporter.verify(), 8000, 'smtp.verify');
+    console.log('SMTP VERIFY SUCCESS', { host, port, secure });
+    return { ok: true };
+  } catch (error) {
+    console.error('SMTP VERIFY FAILED', {
+      host,
+      port,
+      secure,
+      error: error?.message || String(error),
+    });
+    return { ok: false, error: error?.message || String(error) };
+  }
+};
 
 /**
  * Send 6-digit OTP email.
@@ -219,4 +277,5 @@ module.exports = {
   sendOtpEmail,
   sendInvoiceEmail,
   isEmailConfigured,
+  verifySmtpTransport,
 };

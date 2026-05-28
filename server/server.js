@@ -4,6 +4,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
+const { verifySmtpTransport } = require('./utils/emailService');
 
 // Load environment variables from server/.env (works regardless of process cwd)
 const envPath = path.join(__dirname, '.env');
@@ -137,4 +138,6 @@ const connectWithRetry = async (retryDelay = 5000) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   connectWithRetry();
+  // Non-blocking SMTP verification for production diagnostics.
+  verifySmtpTransport();
 });
