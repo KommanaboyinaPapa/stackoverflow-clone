@@ -238,7 +238,9 @@ const handlePostCredentialLogin = async (user, req) => {
     location: payload.location,
   });
 
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd =
+    process.env.NODE_ENV === 'production' ||
+    process.env.RAILWAY_ENVIRONMENT_NAME === 'production';
   const emailConfigured = isEmailConfigured();
 
   // In production, email misconfiguration should fail fast.
@@ -248,11 +250,23 @@ const handlePostCredentialLogin = async (user, req) => {
     throw err;
   }
 
+  // Always log whether we are scheduling the async email task (this is the main
+  // thing to check when Railway shows "no email logs").
+  console.log('EMAIL OTP ASYNC SCHEDULE', {
+    email: user.email,
+    emailConfigured,
+    nodeEnv: process.env.NODE_ENV || '(unset)',
+    railwayEnv: process.env.RAILWAY_ENVIRONMENT_NAME || '(unset)',
+    replicaId: process.env.RAILWAY_REPLICA_ID || '(unset)',
+  });
+
   // Fire-and-forget OTP email sending so login API response is not blocked by SMTP latency.
   if (emailConfigured) {
     setImmediate(async () => {
       try {
+        console.log('EMAIL OTP ASYNC TASK START', { toEmail: user.email, purpose: 'device_login' });
         await sendOtpEmail(user.email, code, 'device_login', user.name);
+        console.log('EMAIL OTP ASYNC TASK DONE', { toEmail: user.email, purpose: 'device_login' });
       } catch (error) {
         // sendOtpEmail already logs failures; this is just a safety net.
         console.error('OTP EMAIL ASYNC TASK FAILED', {

@@ -68,6 +68,12 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
   const subject = subjectMap[purpose] || subjectMap.verification;
 
   if (!isEmailConfigured()) {
+    console.log('EMAIL SEND SKIPPED (NOT CONFIGURED)', {
+      host: getSmtpHost(),
+      userConfigured: Boolean(getSmtpUser()),
+      passConfigured: Boolean(getSmtpPass()),
+      nodeEnv: process.env.NODE_ENV || '(unset)',
+    });
     if (isDev()) {
       console.log('--- EMAIL OTP (dev, not configured) ---');
       console.log(`To: ${toEmail}`);
