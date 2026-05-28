@@ -4,6 +4,10 @@
 const getErrorMessage = (err, fallback = 'Something went wrong. Please try again.') => {
   if (!err) return fallback;
 
+  if (err.code === 'ECONNABORTED') {
+    return 'Request timed out. Please try again.';
+  }
+
   const message = err.response?.data?.message;
   if (message) return message;
 

@@ -8,8 +8,8 @@ const { formatUser } = require('./formatUser');
 const {
   generateOtpCode,
   getOtpExpiresAt,
-  deliverOtp,
 } = require('./otpService');
+const { sendOtpEmail, isEmailConfigured } = require('./emailService');
 const {
   isMobileLoginWindowOpen,
   getMobileLoginWindowStatus,
@@ -116,6 +116,7 @@ const completeLoginSession = async (user, req, deviceId, trustDevice = true) => 
 };
 
 const handlePostCredentialLogin = async (user, req) => {
+  const flowStartAt = Date.now();
   const deviceId = req.body?.deviceId?.trim();
   const forceDeviceVerification =
     process.env.NODE_ENV !== 'production' && Boolean(req.body?.forceDeviceVerification);
@@ -173,17 +174,20 @@ const handlePostCredentialLogin = async (user, req) => {
     return completeLoginSession(user, req, deviceId, true);
   }
 
-  const otherTrusted = await TrustedDevice.countDocuments({
-    user: user._id,
-    deviceId: { $ne: deviceId },
-  });
-  const otherHistory = await LoginHistory.findOne({
-    user: user._id,
-    deviceId: { $ne: deviceId },
-  });
+  // Run the "other devices" checks in parallel (these can be slow on large datasets).
+  const [otherTrusted, otherHistoryExists] = await Promise.all([
+    TrustedDevice.countDocuments({
+      user: user._id,
+      deviceId: { $ne: deviceId },
+    }),
+    LoginHistory.exists({
+      user: user._id,
+      deviceId: { $ne: deviceId },
+    }),
+  ]);
 
-  debugLog('OTHER DEVICE CHECK', { otherTrusted, otherHistory: Boolean(otherHistory) });
-  if (otherTrusted === 0 && !otherHistory && !forceDeviceVerification) {
+  debugLog('OTHER DEVICE CHECK', { otherTrusted, otherHistory: Boolean(otherHistoryExists) });
+  if (otherTrusted === 0 && !otherHistoryExists && !forceDeviceVerification) {
     debugLog('FIRST DEVICE LOGIN, COMPLETING SESSION', {
       userId: user._id.toString(),
       deviceId,
@@ -211,6 +215,11 @@ const handlePostCredentialLogin = async (user, req) => {
     deviceId,
   });
   const code = generateOtpCode();
+  console.log('OTP GENERATION', {
+    userId: user._id.toString(),
+    email: user.email,
+    deviceId,
+  });
   const pendingSessionId = crypto.randomBytes(16).toString('hex');
   const expiresAt = getOtpExpiresAt();
 
@@ -229,57 +238,59 @@ const handlePostCredentialLogin = async (user, req) => {
     location: payload.location,
   });
 
-  const delivery = await deliverOtp({
-    channel: 'email',
-    email: user.email,
-    code,
-    purpose: 'device_login',
-    userName: user.name,
-  });
-  debugLog('OTP DELIVERY RESULT', {
-    sent: delivery.sent,
-    showDemoOtp: Boolean(delivery.showDemoOtp),
-    reason: delivery.reason || null,
-  });
+  const isProd = process.env.NODE_ENV === 'production';
+  const emailConfigured = isEmailConfigured();
 
-  if (!delivery.sent) {
-    const err = new Error(
-      process.env.NODE_ENV === 'production'
-        ? `Failed to send OTP email. ${delivery.reason || 'Please try again later.'}`
-        : `OTP delivery failed. ${delivery.reason || 'Using demo OTP in development.'}`
-    );
-    err.statusCode = process.env.NODE_ENV === 'production' ? 502 : 500;
-    err.delivery = delivery;
-    debugLog('OTP DELIVERY FAILED', {
-      email: user.email,
-      deviceId,
-      delivery,
-    });
-    if (process.env.NODE_ENV === 'production') {
-      throw err;
-    }
+  // In production, email misconfiguration should fail fast.
+  if (isProd && !emailConfigured) {
+    const err = new Error('Failed to send OTP email. Email service not configured.');
+    err.statusCode = 502;
+    throw err;
   }
+
+  // Fire-and-forget OTP email sending so login API response is not blocked by SMTP latency.
+  if (emailConfigured) {
+    setImmediate(async () => {
+      try {
+        await sendOtpEmail(user.email, code, 'device_login', user.name);
+      } catch (error) {
+        // sendOtpEmail already logs failures; this is just a safety net.
+        console.error('OTP EMAIL ASYNC TASK FAILED', {
+          toEmail: user.email,
+          error: error?.message || String(error),
+        });
+      }
+    });
+  }
+
+  console.log('OTP FLOW TIME', {
+    ms: Date.now() - flowStartAt,
+    email: user.email,
+  });
 
   const response = {
     success: true,
     requiresDeviceVerification: true,
     pendingSessionId,
-    message: delivery.sent
+    message: emailConfigured
       ? `New device detected. Enter the code sent to ${user.email}.`
       : 'New device detected. Enter the verification code (see demo OTP in development).',
     deviceLabel: `${payload.browser} · ${payload.deviceName}`,
     emailHint: user.email,
     otpChannel: 'email',
-    otpSent: delivery.sent,
+    otpSent: emailConfigured || !isProd,
+    otpSendDeferred: Boolean(emailConfigured),
   };
 
   if (forceDeviceVerification && process.env.NODE_ENV !== 'production') {
     response.demoForced = true;
   }
 
-  if (delivery.showDemoOtp && process.env.NODE_ENV !== 'production') {
-    response.demoOtp = delivery.showDemoOtp;
-    response.demoNote = delivery.demoNote;
+  // Development convenience: if email isn't configured, show OTP on screen.
+  if (!emailConfigured && !isProd) {
+    response.demoOtp = code;
+    response.demoNote =
+      'Development mode: OTP shown below because email is not configured.';
   }
 
   return response;

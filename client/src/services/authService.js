@@ -61,13 +61,18 @@ export const login = async ({
   trustDevice = true,
   forceDeviceVerification = false,
 }) => {
-  const { data } = await API.post('/auth/login', {
-    email,
-    password,
-    trustDevice,
-    forceDeviceVerification,
-    ...getDeviceContext(),
-  });
+  const { data } = await API.post(
+    '/auth/login',
+    {
+      email,
+      password,
+      trustDevice,
+      forceDeviceVerification,
+      ...getDeviceContext(),
+    },
+    // Prevent "Logging in..." from hanging indefinitely on slow/broken networks.
+    { timeout: 10000 }
+  );
   if (!data.requiresDeviceVerification) {
     applyAuthResponse(data);
   }
@@ -79,11 +84,15 @@ export const verifyDeviceLogin = async ({
   otp,
   trustDevice = true,
 }) => {
-  const { data } = await API.post('/auth/verify-device-login', {
-    pendingSessionId,
-    otp,
-    trustDevice,
-  });
+  const { data } = await API.post(
+    '/auth/verify-device-login',
+    {
+      pendingSessionId,
+      otp,
+      trustDevice,
+    },
+    { timeout: 10000 }
+  );
   return applyAuthResponse(data);
 };
 

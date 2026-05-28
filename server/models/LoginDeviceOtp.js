@@ -22,4 +22,12 @@ const loginDeviceOtpSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Fast lookups/deletes for active OTPs
+loginDeviceOtpSchema.index({ user: 1, verified: 1 });
+loginDeviceOtpSchema.index({ user: 1, deviceId: 1, verified: 1 });
+
+// Auto-cleanup expired OTPs (reduces collection size & improves query speed).
+// MongoDB TTL monitor runs roughly every ~60s, so expiry is not instant, but good enough.
+loginDeviceOtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 module.exports = mongoose.model('LoginDeviceOtp', loginDeviceOtpSchema);

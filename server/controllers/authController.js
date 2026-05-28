@@ -90,6 +90,8 @@ exports.register = async (req, res) => {
 
 // POST /api/auth/login
 exports.login = async (req, res) => {
+  const loginStartAt = Date.now();
+  let responseTimeLogged = false;
   try {
     const { email, password } = req.body;
     const requestPayload = {
@@ -97,6 +99,10 @@ exports.login = async (req, res) => {
       deviceId: req.body?.deviceId || null,
       trustDevice: req.body?.trustDevice,
     };
+    console.log('LOGIN START', {
+      email: requestPayload.email,
+      deviceId: requestPayload.deviceId || null,
+    });
     debugLog('LOGIN API HIT /api/auth/login', requestPayload);
 
     const validationErrors = validateLogin({ email, password });
@@ -137,6 +143,7 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    console.log('USER VERIFIED', { userId: user._id.toString(), email: user.email });
     const result = await handlePostCredentialLogin(user, req);
     debugLog('LOGIN SUCCESS', {
       email: user.email,
@@ -148,6 +155,12 @@ exports.login = async (req, res) => {
       requiresDeviceVerification: result.requiresDeviceVerification || false,
       deviceId: req.body?.deviceId || null,
     });
+    console.log('LOGIN RESPONSE TIME', {
+      ms: Date.now() - loginStartAt,
+      email: user.email,
+      requiresDeviceVerification: result.requiresDeviceVerification || false,
+    });
+    responseTimeLogged = true;
     return res.json(result);
   } catch (error) {
     console.error('Login error:', error.stack || error.message);
@@ -156,6 +169,11 @@ exports.login = async (req, res) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     return res.status(500).json({ message: 'Server error. Please try again later.' });
+  } finally {
+    // Safety net: in case we exit early (validation/user not found), still log response time.
+    if (!responseTimeLogged) {
+      console.log('LOGIN RESPONSE TIME', { ms: Date.now() - loginStartAt });
+    }
   }
 };
 

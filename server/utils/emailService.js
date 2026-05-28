@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 
 const getSmtpUser = () => process.env.SMTP_USER || process.env.EMAIL_USER || '';
 const getSmtpPass = () => process.env.SMTP_PASS || process.env.EMAIL_PASS || '';
+const getEmailTimeoutMs = () => Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 8000;
 const getSmtpHost = () => {
   if (process.env.SMTP_HOST) return process.env.SMTP_HOST;
   const user = getSmtpUser();
@@ -25,12 +26,34 @@ const createTransporter = () =>
       user: getSmtpUser(),
       pass: getSmtpPass(),
     },
+    // Hard timeouts so SMTP/network issues don't stall API responses forever.
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 5000,
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 5000,
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 8000,
   });
 
 const getFromAddress = () =>
   process.env.EMAIL_FROM || getSmtpUser() || 'noreply@stackclone.local';
 
 const isDev = () => process.env.NODE_ENV !== 'production';
+
+const withTimeout = (promise, ms, label = 'operation') =>
+  new Promise((resolve, reject) => {
+    const id = setTimeout(() => {
+      const err = new Error(`${label} timed out after ${ms}ms`);
+      err.code = 'TIMEOUT';
+      reject(err);
+    }, ms);
+    promise
+      .then((val) => {
+        clearTimeout(id);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(id);
+        reject(err);
+      });
+  });
 
 /**
  * Send 6-digit OTP email.
@@ -62,25 +85,29 @@ const sendOtpEmail = async (toEmail, otpCode, purpose = 'verification', userName
       userConfigured: Boolean(getSmtpUser()),
       passConfigured: Boolean(getSmtpPass()),
     });
-    console.log('OTP EMAIL SEND START', { toEmail, purpose, userName });
+    console.log('EMAIL SEND START', { toEmail, purpose, userName });
     const transporter = createTransporter();
-    await transporter.sendMail({
-      from: `"StackClone" <${getFromAddress()}>`,
-      to: toEmail,
-      subject,
-      text: `Hello ${userName},\n\nYour one-time code is: ${otpCode}\n\nValid for 5 minutes. Do not share this code.\n\n— StackClone`,
-      html: `
-        <p>Hello <strong>${userName}</strong>,</p>
-        <p>Your one-time verification code:</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otpCode}</p>
-        <p>Valid for <strong>5 minutes</strong>. Do not share this code.</p>
-        <p>— StackClone Team</p>
-      `,
-    });
-    console.log('OTP EMAIL SEND SUCCESS', { toEmail, purpose });
+    await withTimeout(
+      transporter.sendMail({
+        from: `"StackClone" <${getFromAddress()}>`,
+        to: toEmail,
+        subject,
+        text: `Hello ${userName},\n\nYour one-time code is: ${otpCode}\n\nValid for 5 minutes. Do not share this code.\n\n— StackClone`,
+        html: `
+          <p>Hello <strong>${userName}</strong>,</p>
+          <p>Your one-time verification code:</p>
+          <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otpCode}</p>
+          <p>Valid for <strong>5 minutes</strong>. Do not share this code.</p>
+          <p>— StackClone Team</p>
+        `,
+      }),
+      getEmailTimeoutMs(),
+      'sendMail'
+    );
+    console.log('EMAIL SEND SUCCESS', { toEmail, purpose });
     return { sent: true };
   } catch (error) {
-    console.error('OTP EMAIL SEND FAILED', { toEmail, purpose, error: error.message });
+    console.error('EMAIL SEND FAILED', { toEmail, purpose, error: error.message });
     if (isDev()) {
       console.log(`Dev fallback OTP for ${toEmail}: ${otpCode}`);
       return { sent: false, reason: error.message, demo: true };
