@@ -133,11 +133,13 @@ export const confirmForgotPassword = async ({
   sessionKey,
   confirm,
   generatedPassword,
+  otp,
 }) => {
   const { data } = await API.post('/auth/forgot-password/confirm', {
     sessionKey,
     confirm,
     generatedPassword,
+    otp,
   });
   return data;
 };

@@ -14,6 +14,8 @@ const ForgotPassword = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [tempPassword, setTempPassword] = useState('');
   const [sessionKey, setSessionKey] = useState('');
+  const [otp, setOtp] = useState('');
+  const [requiresOtp, setRequiresOtp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -24,6 +26,8 @@ const ForgotPassword = () => {
     setSuccessMessage('');
     setTempPassword('');
     setSessionKey('');
+    setOtp('');
+    setRequiresOtp(false);
     setCopied(false);
 
     const payload = {
@@ -48,7 +52,13 @@ const ForgotPassword = () => {
         setSessionKey(data.sessionKey || '');
       }
 
-      setSuccessMessage(data.message || t('forgot.tempGenerated'));
+      if (data.requiresOtp) {
+        setSessionKey(data.sessionKey || '');
+        setRequiresOtp(true);
+        setSuccessMessage(data.message || 'OTP sent. Please enter the code to continue.');
+      } else {
+        setSuccessMessage(data.message || t('forgot.tempGenerated'));
+      }
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(msg || getErrorMessage(err, t('forgot.resetFailed')));
@@ -58,19 +68,33 @@ const ForgotPassword = () => {
   };
 
   const handleConfirmSend = async () => {
-    if (!sessionKey || !tempPassword) return;
+    if (!sessionKey) return;
     setError('');
     setSuccessMessage('');
     setConfirmLoading(true);
     try {
-      const data = await confirmForgotPassword({
-        sessionKey,
-        confirm: true,
-        generatedPassword: tempPassword,
-      });
+      const payload = { sessionKey, confirm: true };
+      if (requiresOtp) {
+        if (!otp.trim()) {
+          setError('Please enter the OTP sent to your phone.');
+          return;
+        }
+        payload.otp = otp.trim();
+      } else {
+        if (!tempPassword) return;
+        payload.generatedPassword = tempPassword;
+      }
+
+      const data = await confirmForgotPassword(payload);
       setSuccessMessage(data.message || t('forgot.confirmSuccess'));
-      // Prevent accidental re-sends; keep temp password visible for copy.
+
+      if (data.generatedPassword) {
+        setTempPassword(data.generatedPassword);
+      }
+
       setSessionKey('');
+      setOtp('');
+      setRequiresOtp(false);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(msg || getErrorMessage(err, t('forgot.confirmFailed')));
@@ -83,6 +107,8 @@ const ForgotPassword = () => {
     if (!sessionKey) {
       setTempPassword('');
       setSuccessMessage('');
+      setOtp('');
+      setRequiresOtp(false);
       return;
     }
     setError('');
@@ -92,6 +118,8 @@ const ForgotPassword = () => {
       setSuccessMessage(data.message || 'Password reset cancelled.');
       setTempPassword('');
       setSessionKey('');
+      setOtp('');
+      setRequiresOtp(false);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(msg || getErrorMessage(err, t('forgot.cancelFailed')));
@@ -206,14 +234,50 @@ const ForgotPassword = () => {
                 method === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)
               }
               autoComplete={method === 'email' ? 'email' : 'tel'}
-              disabled={!!tempPassword}
+              disabled={!!tempPassword || requiresOtp}
             />
           </div>
 
-          {!tempPassword && (
+          {requiresOtp && !tempPassword && (
+            <div className="form-group">
+              <label htmlFor="forgot-otp">OTP code</label>
+              <input
+                id="forgot-otp"
+                type="text"
+                name="otp"
+                placeholder={t('otpPlaceholder')}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                autoComplete="one-time-code"
+              />
+            </div>
+          )}
+
+          {!tempPassword && !requiresOtp && (
             <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
               {loading ? t('forgot.submitting') : t('forgot.submit')}
             </button>
+          )}
+
+          {requiresOtp && !tempPassword && (
+            <div className="temp-password-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmSend}
+                disabled={confirmLoading || !otp.trim()}
+              >
+                {confirmLoading ? t('forgot.submitting') : t('forgot.confirmSend')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleCancel}
+                disabled={confirmLoading}
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
           )}
         </form>
 

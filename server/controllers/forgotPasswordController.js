@@ -5,7 +5,14 @@ const ForgotPasswordSession = require('../models/ForgotPasswordSession');
 const { generateLetterPassword } = require('../utils/generatePassword');
 const { hasForgotPasswordToday } = require('../utils/dateHelper');
 const { sendPasswordEmail, isEmailConfigured } = require('../utils/emailService');
-const { sendTextSms, isSmsConfigured } = require('../utils/smsService');
+const {
+  sendTextSms,
+  sendVerifyOtp,
+  verifyTwilioVerifyOtp,
+  isSmsConfigured,
+  isTwilioVerifyConfigured,
+  normalizeToE164IndiaIfNeeded,
+} = require('../utils/smsService');
 
 const DAILY_LIMIT_MESSAGE = 'You can use this option only one time per day.';
 const isProductionEnv = () =>
@@ -32,7 +39,12 @@ exports.forgotPassword = async (req, res) => {
     if (email) {
       user = await User.findOne({ email }).select('+password');
     } else {
-      user = await User.findOne({ phone }).select('+password');
+      const normalizedPhone = normalizeToE164IndiaIfNeeded(phone);
+      const phoneCandidates = [phone];
+      if (normalizedPhone && normalizedPhone !== phone) {
+        phoneCandidates.push(normalizedPhone);
+      }
+      user = await User.findOne({ phone: { $in: phoneCandidates } }).select('+password');
     }
 
     if (!user) {
@@ -45,8 +57,8 @@ exports.forgotPassword = async (req, res) => {
       return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
     }
 
-    const newPassword = generateLetterPassword(12);
     const method = email ? 'email' : 'phone';
+    const target = method === 'email' ? user.email : user.phone || phone;
 
     // Replace any existing pending sessions for the user (only the latest should be confirmable)
     await ForgotPasswordSession.deleteMany({ user: user._id });
@@ -57,9 +69,45 @@ exports.forgotPassword = async (req, res) => {
       user: user._id,
       sessionKey,
       method,
-      target: method === 'email' ? user.email : user.phone || phone,
+      target,
       expiresAt,
     });
+
+    if (method === 'phone') {
+      if (!isTwilioVerifyConfigured()) {
+        await ForgotPasswordSession.deleteOne({ sessionKey });
+        return res.status(503).json({
+          message:
+            'SMS OTP via Twilio Verify is not configured. Please contact support.',
+        });
+      }
+
+      const otpResult = await sendVerifyOtp(target);
+      if (!otpResult.sent) {
+        await ForgotPasswordSession.deleteOne({ sessionKey });
+        console.error('ForgotPassword Verify OTP send failed:', otpResult.reason);
+        if (isDevelopment()) {
+          return res.status(500).json({
+            message:
+              'OTP send failed in development; please try again or use email reset.',
+          });
+        }
+        return res.status(500).json({
+          message: 'Could not send OTP. Please contact support.',
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'OTP sent to your phone. Enter the code to confirm password reset.',
+        method,
+        sessionKey,
+        requiresOtp: true,
+        expiresInMinutes: SESSION_TTL_MINUTES,
+      });
+    }
+
+    const newPassword = generateLetterPassword(12);
 
     // IMPORTANT: Do not update DB password or send email/SMS yet.
     // Only generate and show in UI; user must click Confirm & Send.
@@ -106,14 +154,52 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.json({ success: true, cancelled: true, message: 'Password reset cancelled.' });
     }
 
-    if (!generatedPassword || generatedPassword.length < 8) {
-      return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
-    }
-
     const user = await User.findById(session.user).select('+password');
     if (!user) {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
       return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (session.method === 'phone') {
+      const otp = String(req.body.otp || '').trim();
+      if (!otp) {
+        return res.status(400).json({ message: 'OTP is required.' });
+      }
+
+      const verification = await verifyTwilioVerifyOtp(session.target, otp);
+      if (!verification.verified) {
+        console.error('ForgotPassword Verify OTP failed', {
+          to: session.target,
+          reason: verification.reason,
+        });
+        return res.status(400).json({
+          message: 'Invalid OTP. Please check the code and try again.',
+        });
+      }
+
+      if (hasForgotPasswordToday(user.lastForgotPasswordAt)) {
+        await ForgotPasswordSession.deleteOne({ _id: session._id });
+        return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
+      }
+
+      const newPassword = generateLetterPassword(12);
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(newPassword, salt);
+      user.lastForgotPasswordAt = new Date();
+      await user.save();
+      await ForgotPasswordSession.deleteOne({ _id: session._id });
+
+      return res.json({
+        success: true,
+        method: 'phone',
+        message: 'Password reset confirmed. Use the generated password to log in.',
+        generatedPassword: newPassword,
+        showPasswordOnScreen: true,
+      });
+    }
+
+    if (!generatedPassword || generatedPassword.length < 8) {
+      return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
     }
 
     // Enforce daily limit on actual reset.
@@ -167,54 +253,6 @@ exports.confirmForgotPassword = async (req, res) => {
       });
     }
 
-    // Phone recovery (custom SMS supported via Twilio only in this repo)
-    if (!isSmsConfigured()) {
-      await ForgotPasswordSession.deleteOne({ _id: session._id });
-      if (isDevelopment()) {
-        return res.json({
-          success: true,
-          method: 'phone',
-          message: 'Password updated. SMS service not configured; use the shown password to log in.',
-        });
-      }
-      return res.status(503).json({
-        message: 'SMS service is not configured. Please contact support.',
-      });
-    }
-
-    const smsResult = await sendTextSms(
-      session.target,
-      `StackClone: Your temporary password is ${generatedPassword}. Please log in and change it.`
-    );
-    await ForgotPasswordSession.deleteOne({ _id: session._id });
-
-    if (!smsResult.sent) {
-      console.error('ForgotPassword SMS delivery failed', {
-        to: session.target,
-        provider: smsResult.provider,
-        reason: smsResult.reason,
-      });
-    }
-
-    if (smsResult.sent) {
-      return res.json({
-        success: true,
-        method: 'phone',
-        message: 'A new password has been sent to your phone number.',
-      });
-    }
-
-    if (isDevelopment()) {
-      return res.json({
-        success: true,
-        method: 'phone',
-        message: 'Password updated. SMS send failed in development; use the shown password to log in.',
-      });
-    }
-
-    return res.status(500).json({
-      message: 'Password was updated but we could not send the SMS. Please contact support.',
-    });
   } catch (error) {
     console.error('confirmForgotPassword error:', error.message);
     return res.status(500).json({ message: 'Server error. Please try again later.' });

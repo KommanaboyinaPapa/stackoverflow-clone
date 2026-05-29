@@ -300,6 +300,17 @@ const sendViaTwilioVerify = async (phone) => {
   };
 };
 
+const sendVerifyOtp = async (phone) => {
+  if (!isTwilioVerifyConfigured()) {
+    return {
+      sent: false,
+      provider: 'twilio_verify',
+      reason: 'Twilio Verify is not configured. Set TWILIO_VERIFY_SERVICE_SID.',
+    };
+  }
+  return sendViaTwilioVerify(phone);
+};
+
 // Twilio Verify check (validates user-entered OTP).
 // Docs: https://www.twilio.com/docs/verify/api/verification-check
 const verifyTwilioVerifyOtp = async (phone, otp) => {
@@ -309,6 +320,7 @@ const verifyTwilioVerifyOtp = async (phone, otp) => {
   );
 
   const to = normalizeToE164IndiaIfNeeded(phone);
+  console.log('TWILIO VERIFY CHECK START', { to });
   const body = new URLSearchParams({
     To: String(to || '').trim(),
     Code: String(otp || '').trim(),
@@ -327,17 +339,29 @@ const verifyTwilioVerifyOtp = async (phone, otp) => {
 
   if (resp.statusCode >= 200 && resp.statusCode < 300) {
     const status = String(resp.data?.status || '').toLowerCase();
+    const verified = status === 'approved';
+    if (verified) {
+      console.log('TWILIO VERIFY CHECK SUCCESS', { to, status });
+    } else {
+      console.error('TWILIO VERIFY CHECK FAILED', { to, status });
+    }
     return {
-      verified: status === 'approved',
+      verified,
       provider: 'twilio_verify',
-      reason: status === 'approved' ? null : `Twilio Verify status: ${status || 'unknown'}`,
+      reason: verified ? null : `Twilio Verify status: ${status || 'unknown'}`,
     };
   }
 
+  const reason = resp.data?.message || resp.raw || 'Twilio Verify check failed';
+  console.error('TWILIO VERIFY CHECK FAILED', {
+    to,
+    statusCode: resp.statusCode,
+    reason,
+  });
   return {
     verified: false,
     provider: 'twilio_verify',
-    reason: resp.data?.message || resp.raw || 'Twilio Verify check failed',
+    reason,
   };
 };
 
@@ -460,7 +484,9 @@ module.exports = {
   getSmsProvider,
   logSmsConfig,
   sendTextSms,
+  sendVerifyOtp,
   sendOtpSms,
   verifyMsg91Otp,
   verifyTwilioVerifyOtp,
+  normalizeToE164IndiaIfNeeded,
 };
