@@ -115,7 +115,11 @@ const sendTextSms = async (phone, message) => {
   const to = normalizeToE164IndiaIfNeeded(phone);
   const from = sender || '(missing)';
 
-  console.log('TWILIO SMS SEND START', { to, from });
+  console.log('TWILIO SMS SEND START', {
+    to,
+    from,
+    message: String(message || ''),
+  });
 
   if (!sender) {
     console.error('TWILIO SMS SEND FAILED', {
@@ -160,11 +164,20 @@ const sendTextSms = async (phone, message) => {
       });
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        console.log('TWILIO SMS SEND SUCCESS', { to, from });
+        console.log('TWILIO SMS SEND SUCCESS', {
+          to,
+          from,
+          statusCode: resp.statusCode,
+        });
         return { sent: true, provider: 'twilio' };
       }
 
-      console.error('TWILIO SMS SEND FAILED', { to, from });
+      console.error('TWILIO SMS SEND FAILED', {
+        to,
+        from,
+        statusCode: resp.statusCode,
+        reason: resp.data?.message || resp.raw || 'Twilio messaging request failed',
+      });
       console.error('TWILIO SMS ERROR DETAILS', {
         statusCode: resp.statusCode,
         message: resp.data?.message || null,
@@ -178,7 +191,11 @@ const sendTextSms = async (phone, message) => {
         reason: resp.data?.message || resp.raw || 'Twilio messaging request failed',
       };
     } catch (error) {
-      console.error('TWILIO SMS SEND FAILED', { to, from });
+      console.error('TWILIO SMS SEND FAILED', {
+        to,
+        from,
+        error: error?.message || String(error),
+      });
       console.error('TWILIO SMS ERROR DETAILS', {
         error: error?.message || String(error),
       });
