@@ -144,14 +144,6 @@ export const confirmForgotPassword = async ({
   return data;
 };
 
-export const verifyForgotPasswordOtp = async ({ sessionKey, otp }) => {
-  const { data } = await API.post('/auth/forgot-password/verify-otp', {
-    sessionKey,
-    otp,
-  });
-  return data;
-};
-
 export const logout = () => {
   clearAuth();
 };

@@ -18,9 +18,6 @@ const ForgotPassword = () => {
   const [copied, setCopied] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [smsNotSent, setSmsNotSent] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,15 +44,6 @@ const ForgotPassword = () => {
     try {
       const data = await forgotPassword(payload);
       setSessionKey(data.sessionKey || '');
-+      // Phone flow: server will send OTP and return otpSent=true (no generatedPassword yet)
-+      if (data.otpSent) {
-+        setOtpSent(true);
-+        setSuccessMessage(data.message || t('forgot.otpSent'));
-+        setTempPassword('');
-+        setSmsNotSent(false);
-+        return;
-+      }
-+      // Email flow continues to return generatedPassword immediately for UI.
       setTempPassword(data.generatedPassword || '');
       setSmsNotSent(false);
       setSuccessMessage(data.message || t('forgot.tempGenerated'));
@@ -96,24 +84,6 @@ const ForgotPassword = () => {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    if (!sessionKey || !otp) return;
-    setError('');
-    setVerifyingOtp(true);
-    try {
-      const { verifyForgotPasswordOtp } = await import('../services/authService');
-      const data = await verifyForgotPasswordOtp({ sessionKey, otp });
-      setTempPassword(data.generatedPassword || '');
-      setSuccessMessage(data.message || t('forgot.tempGenerated'));
-      setOtpSent(false);
-    } catch (err) {
-      const msg = err.response?.data?.message;
-      setError(msg || getErrorMessage(err, t('forgot.otpFailed')));
-    } finally {
-      setVerifyingOtp(false);
-    }
-  };
-
   const handleCancel = () => {
     setError('');
     setSuccessMessage('');
@@ -126,8 +96,6 @@ const ForgotPassword = () => {
     setEmail('');
     setPhone('');
     setSmsNotSent(false);
-    setOtp('');
-    setOtpSent(false);
   };
 
   const handleCopy = async () => {
@@ -241,44 +209,15 @@ const ForgotPassword = () => {
                 method === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)
               }
               autoComplete={method === 'email' ? 'email' : 'tel'}
-              disabled={!!tempPassword || otpSent}
+              disabled={!!tempPassword}
             />
           </div>
 
-          {!tempPassword && !otpSent && (
+          {!tempPassword && (
             <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
               {loading ? t('forgot.submitting') : t('forgot.submit')}
             </button>
           )}
-
-+          {otpSent && !tempPassword && (
-+            <div className="otp-panel">
-+              <div className="form-group">
-+                <label htmlFor="forgot-otp">{t('forgot.otpLabel') || 'Enter OTP'}</label>
-+                <input
-+                  id="forgot-otp"
-+                  type="text"
-+                  value={otp}
-+                  onChange={(e) => setOtp(e.target.value)}
-+                  placeholder={t('forgot.otpPlaceholder') || '123456'}
-+                />
-+              </div>
-+              <div className="temp-password-actions">
-+                <button
-+                  type="button"
-+                  className="btn btn-primary"
-+                  onClick={handleVerifyOtp}
-+                  disabled={verifyingOtp || !otp}
-+                >
-+                  {verifyingOtp ? t('forgot.verifying') : t('forgot.verifyOtp')}
-+                </button>
-+                <button type="button" className="btn btn-outline" onClick={handleCancel}>
-+                  {t('common.cancel')}
-+                </button>
-+              </div>
-+            </div>
-+          )}
-*** End Patch
         </form>
 
         <p className="auth-footer">
