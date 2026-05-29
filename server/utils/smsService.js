@@ -32,11 +32,21 @@ const isProductionEnv = () =>
 
 const isDevelopment = () => !isProductionEnv();
 
+const getTwilioSender = () =>
+  envTrim('TWILIO_FROM_NUMBER') || envTrim('TWILIO_PHONE_NUMBER') || envTrim('TWILIO_FROM');
+
+const getTwilioSenderEnvKey = () => {
+  if (hasEnv('TWILIO_FROM_NUMBER')) return 'TWILIO_FROM_NUMBER';
+  if (hasEnv('TWILIO_PHONE_NUMBER')) return 'TWILIO_PHONE_NUMBER';
+  if (hasEnv('TWILIO_FROM')) return 'TWILIO_FROM';
+  return null;
+};
+
 const isTwilioConfigured = () =>
   Boolean(
     hasEnv('TWILIO_ACCOUNT_SID') &&
       hasEnv('TWILIO_AUTH_TOKEN') &&
-      (hasEnv('TWILIO_FROM_NUMBER') || hasEnv('TWILIO_PHONE_NUMBER') || hasEnv('TWILIO_FROM'))
+      getTwilioSender()
   );
 
 const isTwilioVerifyConfigured = () =>
@@ -66,13 +76,21 @@ const isSmsConfigured = () => {
 
 const logSmsConfig = () => {
   const smsProvider = getSmsProvider();
+  const twilioSenderKey = getTwilioSenderEnvKey();
+  const twilioSenderValue = getTwilioSender();
+
   console.log('SMS CONFIG CHECK', {
     smsProvider,
     hasAccountSid: hasEnv('TWILIO_ACCOUNT_SID'),
     hasAuthToken: hasEnv('TWILIO_AUTH_TOKEN'),
     hasVerifyServiceSid: hasEnv('TWILIO_VERIFY_SERVICE_SID'),
-    hasFromNumber:
-      hasEnv('TWILIO_FROM_NUMBER') || hasEnv('TWILIO_PHONE_NUMBER') || hasEnv('TWILIO_FROM'),
+    hasFromNumber: Boolean(twilioSenderKey),
+    twilioSenderKey,
+    twilioSenderPreview: twilioSenderValue
+      ? `***${twilioSenderValue.slice(-4)}`
+      : null,
+    isTwilioVerifyConfigured: isTwilioVerifyConfigured(),
+    isTwilioMessagingConfigured: isTwilioConfigured(),
     isSmsConfigured: isSmsConfigured(),
     nodeEnv: process.env.NODE_ENV || '(unset)',
     railwayEnv: process.env.RAILWAY_ENVIRONMENT_NAME || '(unset)',
@@ -92,16 +110,38 @@ const getBasicAuthHeader = () => {
  */
 const sendTextSms = async (phone, message) => {
   // Custom SMS requires a Twilio From number (Messaging). Verify cannot send arbitrary bodies.
+  // Trial accounts with only verified caller IDs still need a Twilio sender for Messaging API.
+  const sender = getTwilioSender();
+  const to = normalizeToE164IndiaIfNeeded(phone);
+  const from = sender || '(missing)';
+
+  console.log('TWILIO SMS SEND START', { to, from });
+
+  if (!sender) {
+    console.error('TWILIO SMS SEND FAILED', {
+      to,
+      from,
+      reason: 'Twilio Messaging sender missing. Trial account requires a Twilio number for custom SMS sending.',
+      missing: ['TWILIO_FROM_NUMBER', 'TWILIO_PHONE_NUMBER', 'TWILIO_FROM'],
+    });
+    console.error('TWILIO SMS ERROR DETAILS', {
+      hint:
+        'Set TWILIO_FROM_NUMBER (or TWILIO_PHONE_NUMBER/TWILIO_FROM) to a Twilio-owned number capable of sending SMS. Verified caller IDs are not sufficient for custom Twilio Messaging.',
+    });
+    return {
+      sent: false,
+      provider: 'twilio',
+      reason:
+        'Twilio Messaging sender missing. Trial account requires a Twilio number for custom SMS sending.',
+    };
+  }
+
   if (isTwilioConfigured()) {
     try {
       const accountSid = envTrim('TWILIO_ACCOUNT_SID');
       const url = new URL(
         `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
       );
-
-      const to = normalizeToE164IndiaIfNeeded(phone);
-      const from =
-        envTrim('TWILIO_FROM_NUMBER') || envTrim('TWILIO_PHONE_NUMBER') || envTrim('TWILIO_FROM');
 
       const resp = await requestJson({
         method: 'POST',
@@ -119,19 +159,29 @@ const sendTextSms = async (phone, message) => {
       });
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        console.log('TWILIO SMS SEND SUCCESS', { to, from });
         return { sent: true, provider: 'twilio' };
       }
 
+      console.error('TWILIO SMS SEND FAILED', { to, from });
+      console.error('TWILIO SMS ERROR DETAILS', {
+        statusCode: resp.statusCode,
+        message: resp.data?.message || null,
+        raw: resp.raw || null,
+        code: resp.data?.code || null,
+        moreInfo: resp.data?.more_info || null,
+      });
       return {
         sent: false,
         provider: 'twilio',
         reason: resp.data?.message || resp.raw || 'Twilio messaging request failed',
       };
     } catch (error) {
-      console.error('Twilio Messaging SMS failed:', error.message);
-      if (!isDevelopment()) {
-        return { sent: false, reason: error.message };
-      }
+      console.error('TWILIO SMS SEND FAILED', { to, from });
+      console.error('TWILIO SMS ERROR DETAILS', {
+        error: error?.message || String(error),
+      });
+      return { sent: false, provider: 'twilio', reason: error.message };
     }
   }
 

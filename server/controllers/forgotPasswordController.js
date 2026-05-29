@@ -188,6 +188,14 @@ exports.confirmForgotPassword = async (req, res) => {
     );
     await ForgotPasswordSession.deleteOne({ _id: session._id });
 
+    if (!smsResult.sent) {
+      console.error('ForgotPassword SMS delivery failed', {
+        to: session.target,
+        provider: smsResult.provider,
+        reason: smsResult.reason,
+      });
+    }
+
     if (smsResult.sent) {
       return res.json({
         success: true,
