@@ -13,37 +13,75 @@
 const https = require('https');
 const { URL } = require('url');
 
-const isDevelopment = () => process.env.NODE_ENV !== 'production';
+const envTrim = (key) => String(process.env[key] || '').trim();
+const hasEnv = (key) => Boolean(envTrim(key));
+
+const getSmsProvider = () => {
+  const raw = envTrim('SMS_PROVIDER').toLowerCase();
+  if (!raw) return 'auto';
+  // Accept common aliases.
+  if (raw === 'twilio') return 'twilio';
+  if (raw === 'twilio_verify' || raw === 'verify') return 'twilio_verify';
+  if (raw === 'msg91') return 'msg91';
+  return raw;
+};
+
+const isProductionEnv = () =>
+  process.env.NODE_ENV === 'production' ||
+  process.env.RAILWAY_ENVIRONMENT_NAME === 'production';
+
+const isDevelopment = () => !isProductionEnv();
 
 const isTwilioConfigured = () =>
   Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_FROM_NUMBER
+    hasEnv('TWILIO_ACCOUNT_SID') &&
+      hasEnv('TWILIO_AUTH_TOKEN') &&
+      (hasEnv('TWILIO_FROM_NUMBER') || hasEnv('TWILIO_PHONE_NUMBER') || hasEnv('TWILIO_FROM'))
   );
 
 const isTwilioVerifyConfigured = () =>
   Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_VERIFY_SERVICE_SID
+    hasEnv('TWILIO_ACCOUNT_SID') &&
+      hasEnv('TWILIO_AUTH_TOKEN') &&
+      hasEnv('TWILIO_VERIFY_SERVICE_SID')
   );
 
 const isMsg91Configured = () =>
   Boolean(
-    process.env.MSG91_AUTH_KEY &&
-      process.env.MSG91_SENDER_ID &&
-      process.env.MSG91_TEMPLATE_ID
+    hasEnv('MSG91_AUTH_KEY') &&
+      hasEnv('MSG91_SENDER_ID') &&
+      hasEnv('MSG91_TEMPLATE_ID')
   );
 
 // Public: "is SMS OTP possible?"
 // Supports Twilio Verify (no phone number required), Twilio Messaging (From number) and MSG91.
-const isSmsConfigured = () =>
-  isTwilioVerifyConfigured() || isTwilioConfigured() || isMsg91Configured();
+const isSmsConfigured = () => {
+  const provider = getSmsProvider();
+  if (provider === 'twilio_verify') return isTwilioVerifyConfigured();
+  if (provider === 'twilio') return isTwilioVerifyConfigured() || isTwilioConfigured();
+  if (provider === 'msg91') return isMsg91Configured();
+  // auto
+  return isTwilioVerifyConfigured() || isTwilioConfigured() || isMsg91Configured();
+};
+
+const logSmsConfig = () => {
+  const smsProvider = getSmsProvider();
+  console.log('SMS CONFIG CHECK', {
+    smsProvider,
+    hasAccountSid: hasEnv('TWILIO_ACCOUNT_SID'),
+    hasAuthToken: hasEnv('TWILIO_AUTH_TOKEN'),
+    hasVerifyServiceSid: hasEnv('TWILIO_VERIFY_SERVICE_SID'),
+    hasFromNumber:
+      hasEnv('TWILIO_FROM_NUMBER') || hasEnv('TWILIO_PHONE_NUMBER') || hasEnv('TWILIO_FROM'),
+    isSmsConfigured: isSmsConfigured(),
+    nodeEnv: process.env.NODE_ENV || '(unset)',
+    railwayEnv: process.env.RAILWAY_ENVIRONMENT_NAME || '(unset)',
+  });
+};
 
 const getBasicAuthHeader = () => {
-  const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
-  const authToken = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
+  const accountSid = envTrim('TWILIO_ACCOUNT_SID');
+  const authToken = envTrim('TWILIO_AUTH_TOKEN');
   const token = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
   return `Basic ${token}`;
 };
@@ -56,10 +94,14 @@ const sendTextSms = async (phone, message) => {
   // Custom SMS requires a Twilio From number (Messaging). Verify cannot send arbitrary bodies.
   if (isTwilioConfigured()) {
     try {
-      const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
+      const accountSid = envTrim('TWILIO_ACCOUNT_SID');
       const url = new URL(
         `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
       );
+
+      const to = normalizeToE164IndiaIfNeeded(phone);
+      const from =
+        envTrim('TWILIO_FROM_NUMBER') || envTrim('TWILIO_PHONE_NUMBER') || envTrim('TWILIO_FROM');
 
       const resp = await requestJson({
         method: 'POST',
@@ -70,8 +112,8 @@ const sendTextSms = async (phone, message) => {
           Accept: 'application/json',
         },
         body: new URLSearchParams({
-          To: String(phone || '').trim(),
-          From: String(process.env.TWILIO_FROM_NUMBER || '').trim(),
+          To: String(to || '').trim(),
+          From: String(from || '').trim(),
           Body: String(message || ''),
         }).toString(),
       });
@@ -156,19 +198,21 @@ const normalizeToE164IndiaIfNeeded = (phone) => {
   if (raw.startsWith('+')) return raw;
   const digits = raw.replace(/\D/g, '');
   if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  if (digits.length === 11 && digits.startsWith('0')) return `+91${digits.slice(1)}`;
   return raw;
 };
 
 // Twilio Verify send (Twilio generates the OTP; CustomCode is not used).
 // Docs: https://www.twilio.com/docs/verify/api/verification
 const sendViaTwilioVerify = async (phone) => {
-  const serviceSid = String(process.env.TWILIO_VERIFY_SERVICE_SID || '').trim();
+  const serviceSid = envTrim('TWILIO_VERIFY_SERVICE_SID');
   const url = new URL(
     `https://verify.twilio.com/v2/Services/${serviceSid}/Verifications`
   );
 
   const to = normalizeToE164IndiaIfNeeded(phone);
-  console.log('Twilio Verify OTP sending to:', to);
+  console.log('TWILIO VERIFY SEND START', { to });
 
   // Twilio Verify expects application/x-www-form-urlencoded
   // Let Twilio generate and send the OTP automatically (do NOT pass CustomCode).
@@ -189,11 +233,13 @@ const sendViaTwilioVerify = async (phone) => {
   });
 
   if (resp.statusCode >= 200 && resp.statusCode < 300) {
+    console.log('TWILIO VERIFY SEND SUCCESS', { to });
     return { sent: true, provider: 'twilio_verify' };
   }
 
   const reason = resp.data?.message || resp.raw || 'Twilio Verify request failed';
-  console.error('Twilio Verify request failed:', {
+  console.error('TWILIO VERIFY SEND FAILED', {
+    to,
     statusCode: resp.statusCode,
     reason,
   });
@@ -207,7 +253,7 @@ const sendViaTwilioVerify = async (phone) => {
 // Twilio Verify check (validates user-entered OTP).
 // Docs: https://www.twilio.com/docs/verify/api/verification-check
 const verifyTwilioVerifyOtp = async (phone, otp) => {
-  const serviceSid = String(process.env.TWILIO_VERIFY_SERVICE_SID || '').trim();
+  const serviceSid = envTrim('TWILIO_VERIFY_SERVICE_SID');
   const url = new URL(
     `https://verify.twilio.com/v2/Services/${serviceSid}/VerificationCheck`
   );
@@ -361,6 +407,8 @@ module.exports = {
   isTwilioConfigured,
   isTwilioVerifyConfigured,
   isMsg91Configured,
+  getSmsProvider,
+  logSmsConfig,
   sendTextSms,
   sendOtpSms,
   verifyMsg91Otp,

@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const { verifySmtpTransport } = require('./utils/emailService');
+const { logSmsConfig } = require('./utils/smsService');
 
 // Load environment variables from server/.env (works regardless of process cwd)
 const envPath = path.join(__dirname, '.env');
@@ -140,4 +141,6 @@ app.listen(PORT, () => {
   connectWithRetry();
   // Non-blocking SMTP verification for production diagnostics.
   verifySmtpTransport();
+  // SMS provider diagnostics (Twilio / Verify / MSG91).
+  logSmsConfig();
 });

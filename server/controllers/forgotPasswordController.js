@@ -5,10 +5,13 @@ const ForgotPasswordSession = require('../models/ForgotPasswordSession');
 const { generateLetterPassword } = require('../utils/generatePassword');
 const { hasForgotPasswordToday } = require('../utils/dateHelper');
 const { sendPasswordEmail, isEmailConfigured } = require('../utils/emailService');
-const { sendTextSms, isTwilioConfigured } = require('../utils/smsService');
+const { sendTextSms, isSmsConfigured } = require('../utils/smsService');
 
 const DAILY_LIMIT_MESSAGE = 'You can use this option only one time per day.';
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const isProductionEnv = () =>
+  process.env.NODE_ENV === 'production' ||
+  process.env.RAILWAY_ENVIRONMENT_NAME === 'production';
+const isDevelopment = () => !isProductionEnv();
 
 const SESSION_TTL_MINUTES = 15;
 
@@ -128,7 +131,7 @@ exports.confirmForgotPassword = async (req, res) => {
     if (session.method === 'email') {
       if (!isEmailConfigured()) {
         await ForgotPasswordSession.deleteOne({ _id: session._id });
-        if (isDevelopment) {
+        if (isDevelopment()) {
           return res.json({
             success: true,
             method: 'email',
@@ -151,7 +154,7 @@ exports.confirmForgotPassword = async (req, res) => {
         });
       }
 
-      if (isDevelopment) {
+      if (isDevelopment()) {
         return res.json({
           success: true,
           method: 'email',
@@ -165,9 +168,9 @@ exports.confirmForgotPassword = async (req, res) => {
     }
 
     // Phone recovery (custom SMS supported via Twilio only in this repo)
-    if (!isTwilioConfigured()) {
+    if (!isSmsConfigured()) {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
-      if (isDevelopment) {
+      if (isDevelopment()) {
         return res.json({
           success: true,
           method: 'phone',
@@ -193,7 +196,7 @@ exports.confirmForgotPassword = async (req, res) => {
       });
     }
 
-    if (isDevelopment) {
+    if (isDevelopment()) {
       return res.json({
         success: true,
         method: 'phone',
