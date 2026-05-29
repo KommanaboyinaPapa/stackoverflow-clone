@@ -7,10 +7,6 @@ const { hasForgotPasswordToday } = require('../utils/dateHelper');
 const { sendPasswordEmail, isEmailConfigured } = require('../utils/emailService');
 const {
   sendTextSms,
-  sendVerifyOtp,
-  verifyTwilioVerifyOtp,
-  isSmsConfigured,
-  isTwilioVerifyConfigured,
   normalizeToE164IndiaIfNeeded,
 } = require('../utils/smsService');
 
@@ -89,36 +85,14 @@ exports.forgotPassword = async (req, res) => {
     });
 
     if (method === 'phone') {
-      if (!isTwilioVerifyConfigured()) {
-        await ForgotPasswordSession.deleteOne({ sessionKey });
-        return res.status(503).json({
-          message:
-            'SMS OTP via Twilio Verify is not configured. Please contact support.',
-        });
-      }
-
-      const otpResult = await sendVerifyOtp(target);
-      if (!otpResult.sent) {
-        await ForgotPasswordSession.deleteOne({ sessionKey });
-        console.error('ForgotPassword Verify OTP send failed:', otpResult.reason);
-        if (isDevelopment()) {
-          return res.status(500).json({
-            message:
-              'OTP send failed in development; please try again or use email reset.',
-          });
-        }
-        return res.status(500).json({
-          message: 'Could not send OTP. Please contact support.',
-        });
-      }
-
-      console.log('forgotPassword OTP sent', { target, sessionKey });
       return res.json({
         success: true,
-        message: 'OTP sent to your phone. Enter the code to confirm password reset.',
+        message:
+          'Temporary password generated. Click Confirm & Send to update your password and receive it on your registered phone.',
         method,
         sessionKey,
-        requiresOtp: true,
+        generatedPassword,
+        showPasswordOnScreen: true,
         expiresInMinutes: SESSION_TTL_MINUTES,
       });
     }
@@ -181,12 +155,7 @@ exports.confirmForgotPassword = async (req, res) => {
     }
 
     if (session.method === 'phone') {
-      const otp = String(req.body.otp || '').trim();
       const generatedPassword = String(session.generatedPassword || '').trim();
-
-      if (!otp) {
-        return res.status(400).json({ message: 'OTP is required.' });
-      }
 
       if (!generatedPassword || generatedPassword.length < 8) {
         return res.status(500).json({ message: 'Reset session is invalid. Please try again.' });
@@ -197,17 +166,6 @@ exports.confirmForgotPassword = async (req, res) => {
         target: session.target,
       });
 
-      const verification = await verifyTwilioVerifyOtp(session.target, otp);
-      if (!verification.verified) {
-        console.error('ForgotPassword Verify OTP failed', {
-          to: session.target,
-          reason: verification.reason,
-        });
-        return res.status(400).json({
-          message: 'Invalid OTP. Please check the code and try again.',
-        });
-      }
-
       if (hasForgotPasswordToday(user.lastForgotPasswordAt)) {
         await ForgotPasswordSession.deleteOne({ _id: session._id });
         return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
@@ -217,7 +175,23 @@ exports.confirmForgotPassword = async (req, res) => {
       user.password = await bcrypt.hash(generatedPassword, salt);
       user.lastForgotPasswordAt = new Date();
       await user.save();
+
+      const smsResult = await sendTextSms(
+        session.target,
+        `Your StackClone password has been reset. New password: ${generatedPassword}`
+      );
       await ForgotPasswordSession.deleteOne({ _id: session._id });
+
+      if (!smsResult.sent) {
+        console.error('confirmForgotPassword phone SMS failed', {
+          userId: user._id.toString(),
+          sessionKey,
+          reason: smsResult.reason,
+        });
+        return res.status(500).json({
+          message: `Password was updated but SMS delivery failed: ${smsResult.reason}`,
+        });
+      }
 
       console.log('confirmForgotPassword phone success', {
         userId: user._id.toString(),
@@ -227,9 +201,8 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.json({
         success: true,
         method: 'phone',
-        message: 'Password reset confirmed. Use the generated password to log in.',
+        message: 'A new password has been sent to your phone.',
         generatedPassword,
-        showPasswordOnScreen: true,
       });
     }
 

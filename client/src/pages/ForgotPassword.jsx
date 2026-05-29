@@ -14,8 +14,6 @@ const ForgotPassword = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [tempPassword, setTempPassword] = useState('');
   const [sessionKey, setSessionKey] = useState('');
-  const [otp, setOtp] = useState('');
-  const [requiresOtp, setRequiresOtp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -26,8 +24,6 @@ const ForgotPassword = () => {
     setSuccessMessage('');
     setTempPassword('');
     setSessionKey('');
-    setOtp('');
-    setRequiresOtp(false);
     setCopied(false);
 
     const payload = {
@@ -47,14 +43,8 @@ const ForgotPassword = () => {
     try {
       const data = await forgotPassword(payload);
       setSessionKey(data.sessionKey || '');
-
-      if (data.requiresOtp) {
-        setRequiresOtp(true);
-        setSuccessMessage(data.message || 'OTP sent. Please enter the code to continue.');
-      } else {
-        setTempPassword(data.generatedPassword || '');
-        setSuccessMessage(data.message || t('forgot.tempGenerated'));
-      }
+      setTempPassword(data.generatedPassword || '');
+      setSuccessMessage(data.message || t('forgot.tempGenerated'));
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(msg || getErrorMessage(err, t('forgot.resetFailed')));
@@ -72,17 +62,8 @@ const ForgotPassword = () => {
       const payload = {
         sessionKey,
         confirm: true,
+        generatedPassword: tempPassword,
       };
-
-      if (requiresOtp) {
-        if (!otp.trim()) {
-          setError('Please enter the OTP sent to your phone.');
-          return;
-        }
-        payload.otp = otp.trim();
-      } else {
-        payload.generatedPassword = tempPassword;
-      }
 
       const data = await confirmForgotPassword(payload);
       setSuccessMessage(data.message || t('forgot.confirmSuccess'));
@@ -92,8 +73,6 @@ const ForgotPassword = () => {
       }
 
       setSessionKey('');
-      setOtp('');
-      setRequiresOtp(false);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(msg || getErrorMessage(err, t('forgot.confirmFailed')));
@@ -107,8 +86,6 @@ const ForgotPassword = () => {
     setSuccessMessage('');
     setTempPassword('');
     setSessionKey('');
-    setOtp('');
-    setRequiresOtp(false);
     setLoading(false);
     setConfirmLoading(false);
     setCopied(false);
@@ -223,50 +200,14 @@ const ForgotPassword = () => {
                 method === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)
               }
               autoComplete={method === 'email' ? 'email' : 'tel'}
-              disabled={!!tempPassword || requiresOtp}
+              disabled={!!tempPassword}
             />
           </div>
 
-          {requiresOtp && !tempPassword && (
-            <div className="form-group">
-              <label htmlFor="forgot-otp">OTP code</label>
-              <input
-                id="forgot-otp"
-                type="text"
-                name="otp"
-                placeholder={t('otpPlaceholder')}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                autoComplete="one-time-code"
-              />
-            </div>
-          )}
-
-          {!tempPassword && !requiresOtp && (
+          {!tempPassword && (
             <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
               {loading ? t('forgot.submitting') : t('forgot.submit')}
             </button>
-          )}
-
-          {requiresOtp && !tempPassword && (
-            <div className="temp-password-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleConfirmSend}
-                disabled={confirmLoading || !otp.trim()}
-              >
-                {confirmLoading ? t('forgot.submitting') : t('forgot.confirmSend')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={handleCancel}
-                disabled={confirmLoading}
-              >
-                {t('common.cancel')}
-              </button>
-            </div>
           )}
         </form>
 
