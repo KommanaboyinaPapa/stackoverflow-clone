@@ -182,13 +182,22 @@ exports.confirmForgotPassword = async (req, res) => {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
 
       if (!smsResult.sent) {
-        console.error('confirmForgotPassword phone SMS failed', {
+        // Do NOT block the reset if SMS cannot be sent (trial account/no sender number).
+        console.warn('confirmForgotPassword phone SMS not sent (non-blocking)', {
           userId: user._id.toString(),
           sessionKey,
           reason: smsResult.reason,
         });
-        return res.status(500).json({
-          message: `Password was updated but SMS delivery failed: ${smsResult.reason}`,
+
+        // Return success but include the generated password and an advisory message
+        // so the user can copy it from the UI when SMS delivery is unavailable.
+        return res.json({
+          success: true,
+          method: 'phone',
+          message:
+            `Password updated. SMS delivery failed: ${smsResult.reason}. SMS sender number is not configured, so please copy the generated password shown on screen.`,
+          generatedPassword,
+          smsNotSent: true,
         });
       }
 
