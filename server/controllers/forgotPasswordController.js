@@ -60,6 +60,13 @@ exports.forgotPassword = async (req, res) => {
     const method = email ? 'email' : 'phone';
     const target = method === 'email' ? user.email : user.phone || phone;
 
+    console.log('forgotPassword user lookup', {
+      method,
+      identifier: email || phone,
+      userId: user._id.toString(),
+      target,
+    });
+
     // Replace any existing pending sessions for the user (only the latest should be confirmable)
     await ForgotPasswordSession.deleteMany({ user: user._id });
 
@@ -71,6 +78,13 @@ exports.forgotPassword = async (req, res) => {
       method,
       target,
       expiresAt,
+    });
+
+    const generatedPassword = generateLetterPassword(12);
+    console.log('forgotPassword generated password', {
+      method,
+      target,
+      sessionKey,
     });
 
     if (method === 'phone') {
@@ -97,17 +111,18 @@ exports.forgotPassword = async (req, res) => {
         });
       }
 
+      console.log('forgotPassword OTP sent', { target, sessionKey });
       return res.json({
         success: true,
         message: 'OTP sent to your phone. Enter the code to confirm password reset.',
         method,
         sessionKey,
+        generatedPassword,
+        showPasswordOnScreen: true,
         requiresOtp: true,
         expiresInMinutes: SESSION_TTL_MINUTES,
       });
     }
-
-    const newPassword = generateLetterPassword(12);
 
     // IMPORTANT: Do not update DB password or send email/SMS yet.
     // Only generate and show in UI; user must click Confirm & Send.
@@ -117,7 +132,7 @@ exports.forgotPassword = async (req, res) => {
         'Temporary password generated. Click Confirm & Send to update your password and receive it.',
       method,
       sessionKey,
-      generatedPassword: newPassword,
+      generatedPassword,
       showPasswordOnScreen: true,
       expiresInMinutes: SESSION_TTL_MINUTES,
     });
@@ -149,6 +164,12 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Reset session expired. Please try again.' });
     }
 
+    console.log('confirmForgotPassword attempt', {
+      sessionKey,
+      method: session.method,
+      target: session.target,
+    });
+
     if (!confirm) {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
       return res.json({ success: true, cancelled: true, message: 'Password reset cancelled.' });
@@ -162,9 +183,20 @@ exports.confirmForgotPassword = async (req, res) => {
 
     if (session.method === 'phone') {
       const otp = String(req.body.otp || '').trim();
+      const generatedPassword = String(req.body.generatedPassword || '').trim();
+
       if (!otp) {
         return res.status(400).json({ message: 'OTP is required.' });
       }
+
+      if (!generatedPassword || generatedPassword.length < 8) {
+        return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
+      }
+
+      console.log('confirmForgotPassword phone attempt', {
+        sessionKey,
+        target: session.target,
+      });
 
       const verification = await verifyTwilioVerifyOtp(session.target, otp);
       if (!verification.verified) {
@@ -182,18 +214,22 @@ exports.confirmForgotPassword = async (req, res) => {
         return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
       }
 
-      const newPassword = generateLetterPassword(12);
       const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(newPassword, salt);
+      user.password = await bcrypt.hash(generatedPassword, salt);
       user.lastForgotPasswordAt = new Date();
       await user.save();
       await ForgotPasswordSession.deleteOne({ _id: session._id });
+
+      console.log('confirmForgotPassword phone success', {
+        userId: user._id.toString(),
+        sessionKey,
+      });
 
       return res.json({
         success: true,
         method: 'phone',
         message: 'Password reset confirmed. Use the generated password to log in.',
-        generatedPassword: newPassword,
+        generatedPassword,
         showPasswordOnScreen: true,
       });
     }
@@ -229,10 +265,20 @@ exports.confirmForgotPassword = async (req, res) => {
         });
       }
 
+      console.log('confirmForgotPassword email send', {
+        userId: user._id.toString(),
+        sessionKey,
+        email: user.email,
+      });
       const mailResult = await sendPasswordEmail(user.email, generatedPassword, user.name);
       await ForgotPasswordSession.deleteOne({ _id: session._id });
 
       if (mailResult.sent) {
+        console.log('confirmForgotPassword email sent', {
+          userId: user._id.toString(),
+          email: user.email,
+          sessionKey,
+        });
         return res.json({
           success: true,
           method: 'email',

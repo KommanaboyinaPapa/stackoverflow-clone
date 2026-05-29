@@ -73,16 +73,17 @@ const ForgotPassword = () => {
     setSuccessMessage('');
     setConfirmLoading(true);
     try {
-      const payload = { sessionKey, confirm: true };
+      const payload = {
+        sessionKey,
+        confirm: true,
+        generatedPassword: tempPassword,
+      };
       if (requiresOtp) {
         if (!otp.trim()) {
           setError('Please enter the OTP sent to your phone.');
           return;
         }
         payload.otp = otp.trim();
-      } else {
-        if (!tempPassword) return;
-        payload.generatedPassword = tempPassword;
       }
 
       const data = await confirmForgotPassword(payload);
