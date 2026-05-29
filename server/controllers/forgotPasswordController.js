@@ -116,12 +116,11 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // POST /api/auth/forgot-password/confirm
-// Body: { sessionKey, confirm, generatedPassword }
+// Body: { sessionKey, confirm }
 exports.confirmForgotPassword = async (req, res) => {
   try {
     const sessionKey = String(req.body.sessionKey || '').trim();
     const confirm = Boolean(req.body.confirm);
-    const generatedPassword = String(req.body.generatedPassword || '').trim();
 
     if (!sessionKey) {
       return res.status(400).json({ message: 'Reset session is required.' });
@@ -206,6 +205,7 @@ exports.confirmForgotPassword = async (req, res) => {
       });
     }
 
+    const generatedPassword = String(session.generatedPassword || '').trim();
     if (!generatedPassword || generatedPassword.length < 8) {
       return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
     }
