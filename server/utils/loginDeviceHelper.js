@@ -53,6 +53,11 @@ const getDemoLocation = (ip) => {
 const getDevicePayload = (req) => {
   const userAgent = req.body?.userAgent || req.headers['user-agent'] || '';
   const parsed = parseDeviceInfo(userAgent);
+  console.log('LOGIN DEVICE PARSED', {
+    browser: parsed.browser,
+    os: parsed.operatingSystem,
+    deviceType: parsed.deviceType,
+  });
   const ipAddress = getClientIp(req);
   return {
     ...parsed,

@@ -16,6 +16,7 @@ const loginDeviceOtpSchema = new mongoose.Schema(
     browser: { type: String, default: '' },
     deviceType: { type: String, default: '' },
     deviceName: { type: String, default: '' },
+    operatingSystem: { type: String, default: '' },
     ipAddress: { type: String, default: '' },
     location: { type: String, default: '' },
   },
