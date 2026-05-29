@@ -85,14 +85,39 @@ exports.forgotPassword = async (req, res) => {
     });
 
     if (method === 'phone') {
+      // Send an OTP via configured SMS provider (Twilio Verify preferred).
+      const { sendVerifyOtp, sendOtpSms } = require('../utils/smsService');
+      let sendResult = { sent: false };
+      try {
+        // Prefer verify service
+        if (typeof sendVerifyOtp === 'function') {
+          sendResult = await sendVerifyOtp(target);
+        }
+        // Fallback to generic OTP send
+        if (!sendResult.sent && typeof sendOtpSms === 'function') {
+          sendResult = await sendOtpSms(target);
+        }
+      } catch (err) {
+        console.error('forgotPassword send OTP error', err.message || err);
+      }
+
+      if (!sendResult.sent) {
+        console.error('forgotPassword OTP send failed', {
+          to: target,
+          reason: sendResult.reason || 'unknown',
+        });
+        return res.status(503).json({
+          message:
+            'Unable to send OTP to the provided phone number. Please try again later or use email recovery.',
+        });
+      }
+
       return res.json({
         success: true,
-        message:
-          'Temporary password generated. Click Confirm & Send to update your password and receive it on your registered phone.',
+        message: 'OTP sent to your phone. Enter the code to continue.',
         method,
         sessionKey,
-        generatedPassword,
-        showPasswordOnScreen: true,
+        otpSent: true,
         expiresInMinutes: SESSION_TTL_MINUTES,
       });
     }
@@ -282,6 +307,68 @@ exports.confirmForgotPassword = async (req, res) => {
 
   } catch (error) {
     console.error('confirmForgotPassword error:', error.message);
+    return res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+};
+
+// POST /api/auth/forgot-password/verify-otp
+// Body: { sessionKey, otp }
+exports.verifyForgotPasswordOtp = async (req, res) => {
+  try {
+    const sessionKey = String(req.body.sessionKey || '').trim();
+    const otp = String(req.body.otp || '').trim();
+
+    if (!sessionKey || !otp) {
+      return res.status(400).json({ message: 'Session and OTP are required.' });
+    }
+
+    const session = await ForgotPasswordSession.findOne({ sessionKey });
+    if (!session) {
+      return res.status(400).json({ message: 'Reset session expired. Please start again.' });
+    }
+
+    if (new Date() > new Date(session.expiresAt)) {
+      await ForgotPasswordSession.deleteOne({ _id: session._id });
+      return res.status(400).json({ message: 'Reset session expired. Please start again.' });
+    }
+
+    if (session.method !== 'phone') {
+      return res.status(400).json({ message: 'OTP verification is only for phone-based resets.' });
+    }
+
+    const { verifyTwilioVerifyOtp, verifyMsg91Otp, isTwilioVerifyConfigured } = require('../utils/smsService');
+
+    let verifyResult = { verified: false };
+    try {
+      if (isTwilioVerifyConfigured && isTwilioVerifyConfigured()) {
+        verifyResult = await verifyTwilioVerifyOtp(session.target, otp);
+      } else if (typeof verifyMsg91Otp === 'function') {
+        verifyResult = await verifyMsg91Otp(session.target, otp);
+      } else {
+        return res.status(503).json({ message: 'OTP verification is not configured on the server.' });
+      }
+    } catch (err) {
+      console.error('verifyForgotPasswordOtp error', err.message || err);
+    }
+
+    if (!verifyResult.verified) {
+      return res.status(400).json({ message: verifyResult.reason || 'OTP verification failed.' });
+    }
+
+    // OTP verified — return the generated password to the client so it can be shown before confirm.
+    const generatedPassword = String(session.generatedPassword || '').trim();
+    if (!generatedPassword) {
+      return res.status(500).json({ message: 'Temporary password missing. Please start the flow again.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verified. Temporary password generated and shown on screen.',
+      generatedPassword,
+      sessionKey,
+    });
+  } catch (error) {
+    console.error('verifyForgotPasswordOtp error:', error.message);
     return res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 };

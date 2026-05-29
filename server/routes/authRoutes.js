@@ -12,6 +12,7 @@ const {
 const {
   forgotPassword,
   confirmForgotPassword,
+  verifyForgotPasswordOtp,
 } = require('../controllers/forgotPasswordController');
 const auth = require('../middleware/auth');
 
@@ -29,6 +30,9 @@ router.post('/forgot-password', forgotPassword);
 
 // POST /api/auth/forgot-password/confirm (public)
 router.post('/forgot-password/confirm', confirmForgotPassword);
+
+// POST /api/auth/forgot-password/verify-otp (public)
+router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp);
 
 // GET /api/auth/profile  (protected – requires valid JWT)
 router.get('/profile', auth, getProfile);
