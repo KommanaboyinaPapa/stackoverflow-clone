@@ -12,12 +12,12 @@ const ForgotPassword = () => {
   const [method, setMethod] = useState('email');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [generatedPassword, setGeneratedPassword] = useState('');
   const [tempPassword, setTempPassword] = useState('');
   const [sessionKey, setSessionKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
-  const [smsNotSent, setSmsNotSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,8 +44,8 @@ const ForgotPassword = () => {
     try {
       const data = await forgotPassword(payload);
       setSessionKey(data.sessionKey || '');
+      setGeneratedPassword(data.generatedPassword || '');
       setTempPassword(data.generatedPassword || '');
-      setSmsNotSent(false);
       setSuccessMessage(data.message || t('forgot.tempGenerated'));
     } catch (err) {
       const msg = err.response?.data?.message;
@@ -64,7 +64,7 @@ const ForgotPassword = () => {
       const payload = {
         sessionKey,
         confirm: true,
-        generatedPassword: tempPassword,
+        password: tempPassword,
       };
 
       const data = await confirmForgotPassword(payload);
@@ -73,7 +73,6 @@ const ForgotPassword = () => {
       if (data.generatedPassword) {
         setTempPassword(data.generatedPassword);
       }
-      setSmsNotSent(!!data.smsNotSent);
 
       setSessionKey('');
     } catch (err) {
@@ -87,6 +86,7 @@ const ForgotPassword = () => {
   const handleCancel = () => {
     setError('');
     setSuccessMessage('');
+    setGeneratedPassword('');
     setTempPassword('');
     setSessionKey('');
     setLoading(false);
@@ -95,7 +95,6 @@ const ForgotPassword = () => {
     setMethod('email');
     setEmail('');
     setPhone('');
-    setSmsNotSent(false);
   };
 
   const handleCopy = async () => {
@@ -129,13 +128,8 @@ const ForgotPassword = () => {
         {tempPassword && (
           <div className="temp-password-panel" role="status">
             <p className="temp-password-message">{successMessage}</p>
-            {smsNotSent && (
-              <div className="alert alert-warning">
-                SMS sender number is not configured, so please copy the generated password shown on screen.
-              </div>
-            )}
             <div className="temp-password-display">
-              <code className="temp-password-code">{tempPassword}</code>
+              <code className="temp-password-code">{generatedPassword}</code>
               <button
                 type="button"
                 className="btn btn-outline btn-copy"
@@ -144,12 +138,26 @@ const ForgotPassword = () => {
                 {copied ? t('forgot.copied') : t('forgot.copy')}
               </button>
             </div>
+            <div className="form-group">
+              <label htmlFor="forgot-new-password">
+                {t('forgot.customPasswordLabel') || 'Use this password or enter your own'}
+              </label>
+              <input
+                id="forgot-new-password"
+                type="text"
+                value={tempPassword}
+                onChange={(e) => setTempPassword(e.target.value)}
+              />
+              <small className="form-hint">
+                {t('forgot.passwordEditHint') || 'You can edit this password before confirming.'}
+              </small>
+            </div>
             <div className="temp-password-actions">
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={handleConfirmSend}
-                disabled={confirmLoading || !sessionKey}
+                disabled={confirmLoading || !sessionKey || !tempPassword}
               >
                 {confirmLoading ? t('forgot.submitting') : t('forgot.confirmSend')}
               </button>

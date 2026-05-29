@@ -132,14 +132,12 @@ export const forgotPassword = async ({ email, phone }) => {
 export const confirmForgotPassword = async ({
   sessionKey,
   confirm,
-  generatedPassword,
-  otp,
+  password,
 }) => {
   const { data } = await API.post('/auth/forgot-password/confirm', {
     sessionKey,
     confirm,
-    generatedPassword,
-    otp,
+    password,
   });
   return data;
 };

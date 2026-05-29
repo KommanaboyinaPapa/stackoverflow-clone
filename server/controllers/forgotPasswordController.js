@@ -5,10 +5,7 @@ const ForgotPasswordSession = require('../models/ForgotPasswordSession');
 const { generateLetterPassword } = require('../utils/generatePassword');
 const { hasForgotPasswordToday } = require('../utils/dateHelper');
 const { sendPasswordEmail, isEmailConfigured } = require('../utils/emailService');
-const {
-  sendTextSms,
-  normalizeToE164IndiaIfNeeded,
-} = require('../utils/smsService');
+const { normalizeToE164IndiaIfNeeded } = require('../utils/smsService');
 
 const DAILY_LIMIT_MESSAGE = 'You can use this option only one time per day.';
 const isProductionEnv = () =>
@@ -84,25 +81,10 @@ exports.forgotPassword = async (req, res) => {
       sessionKey,
     });
 
-    if (method === 'phone') {
-      return res.json({
-        success: true,
-        message:
-          'Temporary password generated. Click Confirm & Send to update your password and receive it on your registered phone.',
-        method,
-        sessionKey,
-        generatedPassword,
-        showPasswordOnScreen: true,
-        expiresInMinutes: SESSION_TTL_MINUTES,
-      });
-    }
-
-    // IMPORTANT: Do not update DB password or send email/SMS yet.
-    // Only generate and show in UI; user must click Confirm & Send.
     return res.json({
       success: true,
       message:
-        'Temporary password generated. Click Confirm & Send to update your password and receive it.',
+        'Temporary password generated. Click Confirm & Send to update your password.',
       method,
       sessionKey,
       generatedPassword,
@@ -153,125 +135,58 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (session.method === 'phone') {
-      const generatedPassword = String(session.generatedPassword || '').trim();
+    const requestedPassword = String(req.body.password || req.body.generatedPassword || '').trim();
+    const passwordToSet = requestedPassword || String(session.generatedPassword || '').trim();
 
-      if (!generatedPassword || generatedPassword.length < 8) {
-        return res.status(500).json({ message: 'Reset session is invalid. Please try again.' });
-      }
-
-      console.log('confirmForgotPassword phone attempt', {
-        sessionKey,
-        target: session.target,
-      });
-
-      if (hasForgotPasswordToday(user.lastForgotPasswordAt)) {
-        await ForgotPasswordSession.deleteOne({ _id: session._id });
-        return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(generatedPassword, salt);
-      user.lastForgotPasswordAt = new Date();
-      await user.save();
-
-      const smsResult = await sendTextSms(
-        session.target,
-        `Your StackClone password has been reset. New password: ${generatedPassword}`
-      );
-      await ForgotPasswordSession.deleteOne({ _id: session._id });
-
-      if (!smsResult.sent) {
-        // Do NOT block the reset if SMS cannot be sent (trial account/no sender number).
-        console.warn('confirmForgotPassword phone SMS not sent (non-blocking)', {
-          userId: user._id.toString(),
-          sessionKey,
-          reason: smsResult.reason,
-        });
-
-        // Return success but include the generated password and an advisory message
-        // so the user can copy it from the UI when SMS delivery is unavailable.
-        return res.json({
-          success: true,
-          method: 'phone',
-          message:
-            `Password updated. SMS delivery failed: ${smsResult.reason}. SMS sender number is not configured, so please copy the generated password shown on screen.`,
-          generatedPassword,
-          smsNotSent: true,
-        });
-      }
-
-      console.log('confirmForgotPassword phone success', {
-        userId: user._id.toString(),
-        sessionKey,
-      });
-
-      return res.json({
-        success: true,
-        method: 'phone',
-        message: 'A new password has been sent to your phone.',
-        generatedPassword,
+    if (!passwordToSet || passwordToSet.length < 8) {
+      return res.status(400).json({
+        message:
+          'Password must be provided and be at least 8 characters long. Please enter a valid password.',
       });
     }
 
-    const generatedPassword = String(session.generatedPassword || '').trim();
-    if (!generatedPassword || generatedPassword.length < 8) {
-      return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
-    }
-
-    // Enforce daily limit on actual reset.
     if (hasForgotPasswordToday(user.lastForgotPasswordAt)) {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
       return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(generatedPassword, salt);
+    user.password = await bcrypt.hash(passwordToSet, salt);
     user.lastForgotPasswordAt = new Date();
     await user.save();
+    await ForgotPasswordSession.deleteOne({ _id: session._id });
 
-    // Now send via recovery method.
-    if (session.method === 'email') {
-      if (!isEmailConfigured()) {
-        await ForgotPasswordSession.deleteOne({ _id: session._id });
-        if (isDevelopment()) {
-          return res.json({
-            success: true,
-            method: 'email',
-            message: 'Password updated. Email service not configured; use the shown password to log in.',
-          });
-        }
-        return res.status(503).json({
-          message: 'Email service is not configured. Please contact support.',
-        });
-      }
+    const emailTarget = user.email ? user.email : null;
+    const shouldSendEmail = Boolean(emailTarget && isEmailConfigured());
 
+    if (emailTarget && shouldSendEmail) {
       console.log('confirmForgotPassword email send', {
         userId: user._id.toString(),
         sessionKey,
-        email: user.email,
+        email: emailTarget,
       });
-      const mailResult = await sendPasswordEmail(user.email, generatedPassword, user.name);
-      await ForgotPasswordSession.deleteOne({ _id: session._id });
+      const mailResult = await sendPasswordEmail(emailTarget, passwordToSet, user.name);
 
       if (mailResult.sent) {
         console.log('confirmForgotPassword email sent', {
           userId: user._id.toString(),
-          email: user.email,
+          email: emailTarget,
           sessionKey,
         });
         return res.json({
           success: true,
-          method: 'email',
+          method: session.method,
           message: 'A new password has been sent to your email address.',
+          generatedPassword: passwordToSet,
         });
       }
 
       if (isDevelopment()) {
         return res.json({
           success: true,
-          method: 'email',
+          method: session.method,
           message: 'Password updated. Email send failed in development; use the shown password to log in.',
+          generatedPassword: passwordToSet,
         });
       }
 
@@ -279,6 +194,14 @@ exports.confirmForgotPassword = async (req, res) => {
         message: 'Password was updated but we could not send the email. Please contact support.',
       });
     }
+
+    // No email could be sent; still treat the reset as complete.
+    return res.json({
+      success: true,
+      method: session.method,
+      message: 'Password updated. Use the shown password to log in.',
+      generatedPassword: passwordToSet,
+    });
 
   } catch (error) {
     console.error('confirmForgotPassword error:', error.message);
