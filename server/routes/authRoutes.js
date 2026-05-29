@@ -10,8 +10,10 @@ const {
   trustDevice,
 } = require('../controllers/authController');
 const {
-  forgotPassword,
-  confirmForgotPassword,
+  requestForgotPasswordOtp,
+  verifyForgotPasswordOtp,
+  finalizeForgotPassword,
+  cancelForgotPassword,
 } = require('../controllers/forgotPasswordController');
 const auth = require('../middleware/auth');
 
@@ -24,11 +26,11 @@ router.post('/login', login);
 // POST /api/auth/verify-device-login (new device OTP)
 router.post('/verify-device-login', verifyDeviceLogin);
 
-// POST /api/auth/forgot-password (public)
-router.post('/forgot-password', forgotPassword);
-
-// POST /api/auth/forgot-password/confirm (public)
-router.post('/forgot-password/confirm', confirmForgotPassword);
+// Forgot password (public) - OTP flow
+router.post('/forgot-password/request-otp', requestForgotPasswordOtp);
+router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp);
+router.post('/forgot-password/finalize', finalizeForgotPassword);
+router.post('/forgot-password/cancel', cancelForgotPassword);
 
 // GET /api/auth/profile  (protected – requires valid JWT)
 router.get('/profile', auth, getProfile);

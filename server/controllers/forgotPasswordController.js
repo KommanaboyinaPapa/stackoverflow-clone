@@ -4,8 +4,8 @@ const User = require('../models/User');
 const ForgotPasswordSession = require('../models/ForgotPasswordSession');
 const { generateLetterPassword } = require('../utils/generatePassword');
 const { hasForgotPasswordToday } = require('../utils/dateHelper');
-const { sendPasswordEmail, isEmailConfigured } = require('../utils/emailService');
-const { normalizeToE164IndiaIfNeeded } = require('../utils/smsService');
+const { deliverOtp, generateOtpCode, getOtpExpiresAt } = require('../utils/otpService');
+const { normalizeToE164IndiaIfNeeded, sendVerifyOtp, verifyTwilioVerifyOtp } = require('../utils/smsService');
 
 const DAILY_LIMIT_MESSAGE = 'You can use this option only one time per day.';
 const isProductionEnv = () =>
@@ -15,9 +15,18 @@ const isDevelopment = () => !isProductionEnv();
 
 const SESSION_TTL_MINUTES = 15;
 
-// POST /api/auth/forgot-password
-// Body: { email } or { phone } (at least one)
-exports.forgotPassword = async (req, res) => {
+const sha256 = (value) =>
+  crypto.createHash('sha256').update(String(value || '')).digest('hex');
+
+/**
+ * STEP 1: Request OTP
+ * - Email: send OTP via email
+ * - Phone: send OTP via Twilio Verify
+ *
+ * POST /api/auth/forgot-password/request-otp
+ * Body: { email } or { phone } (at least one)
+ */
+exports.requestForgotPasswordOtp = async (req, res) => {
   try {
     const email = req.body.email?.trim().toLowerCase() || '';
     const phone = req.body.phone?.trim() || '';
@@ -64,45 +73,184 @@ exports.forgotPassword = async (req, res) => {
     await ForgotPasswordSession.deleteMany({ user: user._id });
 
     const sessionKey = crypto.randomBytes(16).toString('hex');
-    const generatedPassword = generateLetterPassword(12);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MINUTES * 60 * 1000);
-    await ForgotPasswordSession.create({
+    const otpCode = generateOtpCode();
+    const otpExpiresAt = getOtpExpiresAt();
+
+    const sessionDoc = {
       user: user._id,
       sessionKey,
       method,
       target,
-      generatedPassword,
+      otpExpiresAt,
       expiresAt,
-    });
+    };
 
-    console.log('forgotPassword generated password', {
+    // Email OTP: store hash so we can verify later.
+    // Phone OTP: Twilio Verify stores/verifies the OTP with Twilio; we don't store the code.
+    if (method === 'email') {
+      sessionDoc.otpHash = sha256(otpCode);
+    }
+
+    await ForgotPasswordSession.create(sessionDoc);
+
+    console.log('forgotPassword OTP session created', {
       method,
       target,
       sessionKey,
     });
 
+    if (method === 'email') {
+      const delivery = await deliverOtp({
+        channel: 'email',
+        email: target,
+        code: otpCode,
+        purpose: 'password_reset',
+        userName: user.name || 'User',
+      });
+
+      if (!delivery.sent && !delivery.showDemoOtp && !isDevelopment()) {
+        await ForgotPasswordSession.deleteOne({ sessionKey });
+        return res.status(500).json({
+          message: delivery.reason || 'Could not send OTP email. Please try again later.',
+        });
+      }
+
+      return res.json({
+        success: true,
+        method,
+        sessionKey,
+        message: delivery.sent
+          ? 'OTP sent to your email. Please verify to continue.'
+          : 'OTP generated. Please verify to continue.',
+        ...(delivery.showDemoOtp
+          ? { showDemoOtp: delivery.showDemoOtp, demoNote: delivery.demoNote }
+          : {}),
+        otpExpiresInMinutes: 5,
+      });
+    }
+
+    // Phone OTP via Twilio Verify (DO NOT send password via SMS).
+    const sms = await sendVerifyOtp(target);
+    if (!sms.sent) {
+      await ForgotPasswordSession.deleteOne({ sessionKey });
+      return res.status(500).json({
+        message: sms.reason || 'Could not send OTP SMS. Please try again later.',
+      });
+    }
+
     return res.json({
       success: true,
-      message:
-        'Temporary password generated. Click Confirm & Send to update your password.',
       method,
       sessionKey,
-      generatedPassword,
-      showPasswordOnScreen: true,
-      expiresInMinutes: SESSION_TTL_MINUTES,
+      message: 'OTP sent to your phone. Please verify to continue.',
+      otpExpiresInMinutes: 5,
     });
   } catch (error) {
-    console.error('forgotPassword error:', error.message);
+    console.error('requestForgotPasswordOtp error:', error.message);
     return res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 };
 
-// POST /api/auth/forgot-password/confirm
-// Body: { sessionKey, confirm }
-exports.confirmForgotPassword = async (req, res) => {
+/**
+ * STEP 2: Verify OTP (and generate password AFTER verification)
+ *
+ * POST /api/auth/forgot-password/verify-otp
+ * Body: { sessionKey, otp }
+ */
+exports.verifyForgotPasswordOtp = async (req, res) => {
   try {
     const sessionKey = String(req.body.sessionKey || '').trim();
-    const confirm = Boolean(req.body.confirm);
+    const otp = String(req.body.otp || '').trim();
+
+    if (!sessionKey) {
+      return res.status(400).json({ message: 'Reset session is required.' });
+    }
+
+    if (!otp) {
+      return res.status(400).json({ message: 'OTP is required.' });
+    }
+
+    const session = await ForgotPasswordSession.findOne({ sessionKey });
+    if (!session) {
+      return res.status(400).json({ message: 'Reset session expired. Please try again.' });
+    }
+
+    if (new Date() > new Date(session.expiresAt)) {
+      await ForgotPasswordSession.deleteOne({ _id: session._id });
+      return res.status(400).json({ message: 'Reset session expired. Please try again.' });
+    }
+
+    if (!session.otpVerifiedAt && new Date() > new Date(session.otpExpiresAt)) {
+      await ForgotPasswordSession.deleteOne({ _id: session._id });
+      return res.status(400).json({ message: 'OTP expired. Please request a new one.' });
+    }
+
+    console.log('verifyForgotPasswordOtp attempt', {
+      sessionKey,
+      method: session.method,
+      target: session.target,
+    });
+
+    // Allow idempotent verify: if already verified and password generated, just re-show it.
+    if (session.otpVerifiedAt && session.generatedPassword) {
+      return res.json({
+        success: true,
+        verified: true,
+        method: session.method,
+        message: 'OTP already verified.',
+        generatedPassword: session.generatedPassword,
+        showPasswordOnScreen: true,
+      });
+    }
+
+    let verified = false;
+    let reason = null;
+
+    if (session.method === 'email') {
+      verified = sha256(otp) === String(session.otpHash || '');
+      if (!verified) reason = 'Invalid OTP. Please try again.';
+    } else {
+      const result = await verifyTwilioVerifyOtp(session.target, otp);
+      verified = Boolean(result.verified);
+      reason = result.reason || 'Invalid OTP. Please try again.';
+    }
+
+    if (!verified) {
+      return res.status(400).json({ message: reason || 'Invalid OTP. Please try again.' });
+    }
+
+    const generatedPassword = generateLetterPassword(12);
+    session.otpVerifiedAt = new Date();
+    session.generatedPassword = generatedPassword;
+    await session.save();
+
+    return res.json({
+      success: true,
+      verified: true,
+      method: session.method,
+      message: 'OTP verified. Temporary password generated.',
+      generatedPassword,
+      showPasswordOnScreen: true,
+      expiresInMinutes: SESSION_TTL_MINUTES,
+    });
+
+  } catch (error) {
+    console.error('verifyForgotPasswordOtp error:', error.message);
+    return res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+};
+
+/**
+ * STEP 3: Finalize password reset (ONLY after Accept/Confirm)
+ *
+ * POST /api/auth/forgot-password/finalize
+ * Body: { sessionKey, password? }
+ */
+exports.finalizeForgotPassword = async (req, res) => {
+  try {
+    const sessionKey = String(req.body.sessionKey || '').trim();
+    const requestedPassword = String(req.body.password || '').trim();
 
     if (!sessionKey) {
       return res.status(400).json({ message: 'Reset session is required.' });
@@ -118,15 +266,8 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Reset session expired. Please try again.' });
     }
 
-    console.log('confirmForgotPassword attempt', {
-      sessionKey,
-      method: session.method,
-      target: session.target,
-    });
-
-    if (!confirm) {
-      await ForgotPasswordSession.deleteOne({ _id: session._id });
-      return res.json({ success: true, cancelled: true, message: 'Password reset cancelled.' });
+    if (!session.otpVerifiedAt) {
+      return res.status(400).json({ message: 'Please verify OTP before setting password.' });
     }
 
     const user = await User.findById(session.user).select('+password');
@@ -135,19 +276,16 @@ exports.confirmForgotPassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const requestedPassword = String(req.body.password || req.body.generatedPassword || '').trim();
-    const passwordToSet = requestedPassword || String(session.generatedPassword || '').trim();
-
-    if (!passwordToSet || passwordToSet.length < 8) {
-      return res.status(400).json({
-        message:
-          'Password must be provided and be at least 8 characters long. Please enter a valid password.',
-      });
-    }
-
     if (hasForgotPasswordToday(user.lastForgotPasswordAt)) {
       await ForgotPasswordSession.deleteOne({ _id: session._id });
       return res.status(429).json({ message: DAILY_LIMIT_MESSAGE });
+    }
+
+    const passwordToSet = requestedPassword || String(session.generatedPassword || '').trim();
+    if (!passwordToSet || passwordToSet.length < 8) {
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long.',
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -156,55 +294,32 @@ exports.confirmForgotPassword = async (req, res) => {
     await user.save();
     await ForgotPasswordSession.deleteOne({ _id: session._id });
 
-    const emailTarget = user.email ? user.email : null;
-    const shouldSendEmail = Boolean(emailTarget && isEmailConfigured());
-
-    if (emailTarget && shouldSendEmail) {
-      console.log('confirmForgotPassword email send', {
-        userId: user._id.toString(),
-        sessionKey,
-        email: emailTarget,
-      });
-      const mailResult = await sendPasswordEmail(emailTarget, passwordToSet, user.name);
-
-      if (mailResult.sent) {
-        console.log('confirmForgotPassword email sent', {
-          userId: user._id.toString(),
-          email: emailTarget,
-          sessionKey,
-        });
-        return res.json({
-          success: true,
-          method: session.method,
-          message: 'A new password has been sent to your email address.',
-          generatedPassword: passwordToSet,
-        });
-      }
-
-      if (isDevelopment()) {
-        return res.json({
-          success: true,
-          method: session.method,
-          message: 'Password updated. Email send failed in development; use the shown password to log in.',
-          generatedPassword: passwordToSet,
-        });
-      }
-
-      return res.status(500).json({
-        message: 'Password was updated but we could not send the email. Please contact support.',
-      });
-    }
-
-    // No email could be sent; still treat the reset as complete.
     return res.json({
       success: true,
-      method: session.method,
-      message: 'Password updated. Use the shown password to log in.',
-      generatedPassword: passwordToSet,
+      message: 'Password updated. You can now log in.',
     });
-
   } catch (error) {
-    console.error('confirmForgotPassword error:', error.message);
+    console.error('finalizeForgotPassword error:', error.message);
+    return res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+};
+
+/**
+ * Cancel/reset the flow (no DB changes)
+ *
+ * POST /api/auth/forgot-password/cancel
+ * Body: { sessionKey }
+ */
+exports.cancelForgotPassword = async (req, res) => {
+  try {
+    const sessionKey = String(req.body.sessionKey || '').trim();
+    if (!sessionKey) {
+      return res.status(400).json({ message: 'Reset session is required.' });
+    }
+    await ForgotPasswordSession.deleteOne({ sessionKey });
+    return res.json({ success: true, cancelled: true, message: 'Password reset cancelled.' });
+  } catch (error) {
+    console.error('cancelForgotPassword error:', error.message);
     return res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 };

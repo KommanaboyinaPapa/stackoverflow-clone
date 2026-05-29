@@ -124,21 +124,23 @@ export const updatePhone = async (phone) => {
   return data;
 };
 
-export const forgotPassword = async ({ email, phone }) => {
-  const { data } = await API.post('/auth/forgot-password', { email, phone });
+export const requestForgotPasswordOtp = async ({ email, phone }) => {
+  const { data } = await API.post('/auth/forgot-password/request-otp', { email, phone });
   return data;
 };
 
-export const confirmForgotPassword = async ({
-  sessionKey,
-  confirm,
-  password,
-}) => {
-  const { data } = await API.post('/auth/forgot-password/confirm', {
-    sessionKey,
-    confirm,
-    password,
-  });
+export const verifyForgotPasswordOtp = async ({ sessionKey, otp }) => {
+  const { data } = await API.post('/auth/forgot-password/verify-otp', { sessionKey, otp });
+  return data;
+};
+
+export const finalizeForgotPassword = async ({ sessionKey, password }) => {
+  const { data } = await API.post('/auth/forgot-password/finalize', { sessionKey, password });
+  return data;
+};
+
+export const cancelForgotPassword = async ({ sessionKey }) => {
+  const { data } = await API.post('/auth/forgot-password/cancel', { sessionKey });
   return data;
 };
 
