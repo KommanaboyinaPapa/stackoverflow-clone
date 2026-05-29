@@ -2,8 +2,15 @@ const isDev = () => process.env.NODE_ENV !== 'production';
 
 const getEmailTimeoutMs = () => Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 8000;
 
-// Prefer Resend in production; fallback to SendGrid. Do not use Gmail SMTP in production.
+// Provider priority:
+// 1) Brevo (BREVO_API_KEY) — preferred on Railway
+// 2) Resend (RESEND_API_KEY)
+// 3) SendGrid (SENDGRID_API_KEY)
 const getEmailProvider = () => {
+  const brevoKey = process.env.BREVO_API_KEY || '';
+  if (brevoKey.trim()) {
+    return { name: 'brevo', apiKey: brevoKey.trim() };
+  }
   const resendKey = process.env.RESEND_API_KEY || '';
   if (resendKey.trim()) {
     return { name: 'resend', apiKey: resendKey.trim() };
@@ -83,6 +90,45 @@ const sendViaResend = async ({ from, to, subject, html, text }) => {
   return res.json().catch(() => ({}));
 };
 
+const sendViaBrevo = async ({ from, to, subject, html, text }) => {
+  const provider = getEmailProvider();
+  const sender = parseFrom(from);
+  if (!sender?.email) {
+    throw new Error('EMAIL_FROM is invalid (expected "Name <email@domain>" or "email@domain").');
+  }
+
+  const payload = {
+    sender: {
+      email: sender.email,
+      name: sender.name || 'StackClone',
+    },
+    to: [{ email: to }],
+    subject,
+    htmlContent: html,
+    textContent: text,
+  };
+
+  const res = await fetchWithTimeout(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      method: 'POST',
+      headers: {
+        'api-key': provider.apiKey,
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    getEmailTimeoutMs()
+  );
+
+  if (!res.ok) {
+    const errText = await extractApiError(res);
+    throw new Error(`Brevo API error: ${errText}`);
+  }
+  return res.json().catch(() => ({}));
+};
+
 const sendViaSendgrid = async ({ from, to, subject, html, text }) => {
   const provider = getEmailProvider();
   const fromObj = parseFrom(from);
@@ -123,6 +169,9 @@ const sendEmail = async ({ to, subject, html, text }) => {
     throw new Error('EMAIL_FROM is required for email sending.');
   }
 
+  if (provider.name === 'brevo') {
+    return sendViaBrevo({ from, to, subject, html, text });
+  }
   if (provider.name === 'resend') {
     return sendViaResend({ from, to, subject, html, text });
   }
@@ -150,7 +199,24 @@ const verifySmtpTransport = async () => {
   }
 
   try {
-    if (provider.name === 'resend') {
+    if (provider.name === 'brevo') {
+      // Validate API key (docs: GET /v3/account)
+      const res = await fetchWithTimeout(
+        'https://api.brevo.com/v3/account',
+        {
+          method: 'GET',
+          headers: {
+            'api-key': provider.apiKey,
+            accept: 'application/json',
+          },
+        },
+        8000
+      );
+      if (!res.ok) {
+        const errText = await extractApiError(res);
+        throw new Error(`Brevo verify failed: ${errText}`);
+      }
+    } else if (provider.name === 'resend') {
       // Lightweight auth/connectivity check.
       const res = await fetchWithTimeout(
         'https://api.resend.com/api-keys',
