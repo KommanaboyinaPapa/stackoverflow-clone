@@ -46,17 +46,13 @@ const ForgotPassword = () => {
     setLoading(true);
     try {
       const data = await forgotPassword(payload);
-
-      if (data.generatedPassword) {
-        setTempPassword(data.generatedPassword);
-        setSessionKey(data.sessionKey || '');
-      }
+      setSessionKey(data.sessionKey || '');
 
       if (data.requiresOtp) {
-        setSessionKey(data.sessionKey || '');
         setRequiresOtp(true);
         setSuccessMessage(data.message || 'OTP sent. Please enter the code to continue.');
       } else {
+        setTempPassword(data.generatedPassword || '');
         setSuccessMessage(data.message || t('forgot.tempGenerated'));
       }
     } catch (err) {
@@ -76,14 +72,16 @@ const ForgotPassword = () => {
       const payload = {
         sessionKey,
         confirm: true,
-        generatedPassword: tempPassword,
       };
+
       if (requiresOtp) {
         if (!otp.trim()) {
           setError('Please enter the OTP sent to your phone.');
           return;
         }
         payload.otp = otp.trim();
+      } else {
+        payload.generatedPassword = tempPassword;
       }
 
       const data = await confirmForgotPassword(payload);
@@ -104,29 +102,19 @@ const ForgotPassword = () => {
     }
   };
 
-  const handleCancel = async () => {
-    if (!sessionKey) {
-      setTempPassword('');
-      setSuccessMessage('');
-      setOtp('');
-      setRequiresOtp(false);
-      return;
-    }
+  const handleCancel = () => {
     setError('');
-    setConfirmLoading(true);
-    try {
-      const data = await confirmForgotPassword({ sessionKey, confirm: false });
-      setSuccessMessage(data.message || 'Password reset cancelled.');
-      setTempPassword('');
-      setSessionKey('');
-      setOtp('');
-      setRequiresOtp(false);
-    } catch (err) {
-      const msg = err.response?.data?.message;
-      setError(msg || getErrorMessage(err, t('forgot.cancelFailed')));
-    } finally {
-      setConfirmLoading(false);
-    }
+    setSuccessMessage('');
+    setTempPassword('');
+    setSessionKey('');
+    setOtp('');
+    setRequiresOtp(false);
+    setLoading(false);
+    setConfirmLoading(false);
+    setCopied(false);
+    setMethod('email');
+    setEmail('');
+    setPhone('');
   };
 
   const handleCopy = async () => {

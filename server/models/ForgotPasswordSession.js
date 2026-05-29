@@ -15,6 +15,7 @@ const forgotPasswordSessionSchema = new mongoose.Schema(
     sessionKey: { type: String, required: true, unique: true, index: true },
     method: { type: String, enum: ['email', 'phone'], required: true },
     target: { type: String, default: '' }, // email or phone used for recovery
+    generatedPassword: { type: String, required: true },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: true }

@@ -71,16 +71,17 @@ exports.forgotPassword = async (req, res) => {
     await ForgotPasswordSession.deleteMany({ user: user._id });
 
     const sessionKey = crypto.randomBytes(16).toString('hex');
+    const generatedPassword = generateLetterPassword(12);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MINUTES * 60 * 1000);
     await ForgotPasswordSession.create({
       user: user._id,
       sessionKey,
       method,
       target,
+      generatedPassword,
       expiresAt,
     });
 
-    const generatedPassword = generateLetterPassword(12);
     console.log('forgotPassword generated password', {
       method,
       target,
@@ -117,8 +118,6 @@ exports.forgotPassword = async (req, res) => {
         message: 'OTP sent to your phone. Enter the code to confirm password reset.',
         method,
         sessionKey,
-        generatedPassword,
-        showPasswordOnScreen: true,
         requiresOtp: true,
         expiresInMinutes: SESSION_TTL_MINUTES,
       });
@@ -183,14 +182,14 @@ exports.confirmForgotPassword = async (req, res) => {
 
     if (session.method === 'phone') {
       const otp = String(req.body.otp || '').trim();
-      const generatedPassword = String(req.body.generatedPassword || '').trim();
+      const generatedPassword = String(session.generatedPassword || '').trim();
 
       if (!otp) {
         return res.status(400).json({ message: 'OTP is required.' });
       }
 
       if (!generatedPassword || generatedPassword.length < 8) {
-        return res.status(400).json({ message: 'Temporary password is missing or invalid.' });
+        return res.status(500).json({ message: 'Reset session is invalid. Please try again.' });
       }
 
       console.log('confirmForgotPassword phone attempt', {
