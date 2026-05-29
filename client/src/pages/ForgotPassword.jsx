@@ -17,6 +17,7 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [smsNotSent, setSmsNotSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,6 +45,7 @@ const ForgotPassword = () => {
       const data = await forgotPassword(payload);
       setSessionKey(data.sessionKey || '');
       setTempPassword(data.generatedPassword || '');
+      setSmsNotSent(false);
       setSuccessMessage(data.message || t('forgot.tempGenerated'));
     } catch (err) {
       const msg = err.response?.data?.message;
@@ -71,6 +73,7 @@ const ForgotPassword = () => {
       if (data.generatedPassword) {
         setTempPassword(data.generatedPassword);
       }
+      setSmsNotSent(!!data.smsNotSent);
 
       setSessionKey('');
     } catch (err) {
@@ -92,6 +95,7 @@ const ForgotPassword = () => {
     setMethod('email');
     setEmail('');
     setPhone('');
+    setSmsNotSent(false);
   };
 
   const handleCopy = async () => {
@@ -125,6 +129,11 @@ const ForgotPassword = () => {
         {tempPassword && (
           <div className="temp-password-panel" role="status">
             <p className="temp-password-message">{successMessage}</p>
+            {smsNotSent && (
+              <div className="alert alert-warning">
+                SMS sender number is not configured, so please copy the generated password shown on screen.
+              </div>
+            )}
             <div className="temp-password-display">
               <code className="temp-password-code">{tempPassword}</code>
               <button
