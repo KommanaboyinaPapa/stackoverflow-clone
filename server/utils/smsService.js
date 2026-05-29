@@ -121,18 +121,19 @@ const sendTextSms = async (phone, message) => {
     console.error('TWILIO SMS SEND FAILED', {
       to,
       from,
-      reason: 'Twilio Messaging sender missing. Trial account requires a Twilio number for custom SMS sending.',
+      reason:
+        'Twilio Messaging sender missing. Trial account requires a Twilio-owned from number for custom SMS sending.',
       missing: ['TWILIO_FROM_NUMBER', 'TWILIO_PHONE_NUMBER', 'TWILIO_FROM'],
     });
     console.error('TWILIO SMS ERROR DETAILS', {
       hint:
-        'Set TWILIO_FROM_NUMBER (or TWILIO_PHONE_NUMBER/TWILIO_FROM) to a Twilio-owned number capable of sending SMS. Verified caller IDs are not sufficient for custom Twilio Messaging.',
+        'Set TWILIO_FROM_NUMBER (or TWILIO_PHONE_NUMBER/TWILIO_FROM) to a Twilio-owned SMS sender number. In trial mode, destination numbers must also be verified in your Twilio console.',
     });
     return {
       sent: false,
       provider: 'twilio',
       reason:
-        'Twilio Messaging sender missing. Trial account requires a Twilio number for custom SMS sending.',
+        'Twilio Messaging sender missing. Trial account requires a Twilio-owned from number for custom SMS sending.',
     };
   }
 
