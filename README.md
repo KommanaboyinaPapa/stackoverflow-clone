@@ -276,4 +276,7 @@ This repository includes internship submission evidence for the StackOverflow Cl
 
 ## Author
 
-- GitHub: **https://github.com/your-username** (replace with your profile)
+PAPA KOMMANABOYINA  
+Full Stack Developer (MERN)  
+GitHub: `https://github.com/KommanaboyinaPapa`  
+Project Repository: `https://github.com/KommanaboyinaPapa/stackoverflow-clone`
