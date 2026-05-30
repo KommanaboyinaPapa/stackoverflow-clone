@@ -33,6 +33,8 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+    setGeneratedPassword('');
+    setPasswordInput('');
     setSessionKey('');
     setOtp('');
     setDemoOtp('');
@@ -74,6 +76,8 @@ const ForgotPassword = () => {
     if (!sessionKey) return;
     setError('');
     setSuccessMessage('');
+    setGeneratedPassword('');
+    setPasswordInput('');
     setOtpLoading(true);
     try {
       const data = await verifyForgotPasswordOtp({ sessionKey, otp: otp.trim() });
@@ -171,7 +175,8 @@ const ForgotPassword = () => {
 
         {error && <div className="alert alert-error">{error}</div>}
 
-        {successMessage && step !== 'password' && (
+        {/* Avoid duplicate success alerts: step=done has its own success banner below */}
+        {successMessage && step !== 'password' && step !== 'done' && (
           <div className="alert alert-success">{successMessage}</div>
         )}
 
